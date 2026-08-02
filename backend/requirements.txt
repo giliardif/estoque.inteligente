@@ -1,0 +1,28 @@
+fastapi>=0.118.0
+uvicorn[standard]==0.30.6
+sqlalchemy[asyncio]==2.0.35
+asyncpg==0.29.0
+pydantic==2.9.2
+pydantic-settings==2.5.2
+email-validator==2.2.0
+python-jose[cryptography]==3.4.0
+passlib[argon2]==1.7.4
+slowapi==0.1.9
+defusedxml==0.7.1
+python-multipart>=0.0.31
+alembic==1.13.2
+
+# --- segurança / testes (dev e CI, não vai para produção) ---
+bandit==1.7.9
+pip-audit==2.7.3
+pytest>=9.0.3
+pytest-asyncio>=0.25.0
+httpx==0.27.2
+
+# python-jose fixa pyasn1==0.4.8 e ecdsa==0.19.2, ambos com CVEs sem correção
+# compatível disponível (PYSEC-2026-2263 e PYSEC-2026-1325 — ataques de timing
+# em assinatura/decodificação ASN.1). Mitigação: este projeto usa apenas HS256
+# (HMAC simétrico), então o caminho de código vulnerável (curvas elípticas /
+# parsing ASN.1 de chaves assimétricas) nunca é exercitado em produção.
+# Ação de melhoria registrada: migrar de python-jose para PyJWT (sem essas
+# dependências transitivas) antes de eventualmente adotar RS256/ES256.

@@ -1,0 +1,32 @@
+# --- Segredos / ambiente ---
+.env
+.env.local
+.env.staging
+.env.production
+!.env.example
+
+# --- Backend (Python) ---
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+backend/.pytest_cache/
+backend/.venv/
+backend/venv/
+backend/*.egg-info/
+backend/.coverage
+backend/htmlcov/
+
+# --- Frontend (Node/Next.js) ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/*.tsbuildinfo
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# --- Sistema ---
+.DS_Store
+Thumbs.db
+*.log

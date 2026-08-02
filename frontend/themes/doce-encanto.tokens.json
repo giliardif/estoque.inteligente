@@ -1,0 +1,16 @@
+{
+  "tenant": "doce-encanto",
+  "tokens": {
+    "cor_base": "#14110F",
+    "cor_superficie": "#1B1712",
+    "cor_acento": "#C9862B",
+    "cor_sucesso": "#5B8C63",
+    "cor_alerta": "#A23B3B",
+    "cor_borda": "#2A241F",
+    "cor_texto": "#F2EAE1",
+    "cor_texto_muted": "#8A7F73",
+    "fonte_display": "Fraunces",
+    "fonte_corpo": "Manrope",
+    "logo_texto": "Doce Encanto"
+  }
+}

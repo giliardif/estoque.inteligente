@@ -1,0 +1,36 @@
+# Ambiente LOCAL de desenvolvimento — espelha a topologia de produção.
+# Staging e produção reais rodam no Railway (backend) + Vercel (frontend),
+# cada um com seu próprio banco Supabase/Postgres. Ver ENVIRONMENTS.md.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: estoque_dev
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev_local_only   # nunca usado fora da máquina local
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build: ./frontend
+    env_file: ./frontend/.env.local
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
