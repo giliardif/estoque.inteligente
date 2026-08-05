@@ -1,0 +1,23 @@
+{
+  "tenant": "default",
+  "tokens": {
+    "cor_base": "#0D182A",
+    "cor_superficie": "#1B263B",
+    "cor_acento": "#10B981",
+    "cor_acento_soft": "#34D399",
+    "cor_sucesso": "#10B981",
+    "cor_alerta": "#EF4444",
+    "cor_borda": "#26344A",
+    "cor_texto": "#F3F4F6",
+    "cor_texto_muted": "#8291A8",
+    "fonte_display": "Fraunces",
+    "fonte_corpo": "Manrope",
+    "logo_texto": "NexStock",
+    "logo_tagline": "Estoque Inteligente",
+    "logo_simbolo": "/brand/nexstock-symbol.png",
+    "logo_completo": "/brand/nexstock-logo-full.png",
+    "cor_marca_azul": "#2563EB",
+    "cor_marca_gradiente_de": "#2563EB",
+    "cor_marca_gradiente_para": "#10B981"
+  }
+}

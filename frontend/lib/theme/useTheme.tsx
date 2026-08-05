@@ -6,6 +6,7 @@ type ThemeTokens = {
   cor_base: string;
   cor_superficie: string;
   cor_acento: string;
+  cor_acento_soft?: string;
   cor_sucesso: string;
   cor_alerta: string;
   cor_borda: string;
@@ -14,15 +15,25 @@ type ThemeTokens = {
   fonte_display: string;
   fonte_corpo: string;
   logo_texto: string;
+  logo_tagline?: string;
+  logo_simbolo?: string;
+  logo_completo?: string;
+  cor_marca_azul?: string;
+  cor_marca_gradiente_de?: string;
+  cor_marca_gradiente_para?: string;
 };
 
 const ThemeContext = createContext<ThemeTokens | null>(null);
 
 // Em produção isso viria de GET /tenants/{id}/tema (tabela `themes`), não de um
 // import estático — aqui carregado localmente só porque ainda não existe
-// tela de administração de tema. Trocar de cliente = trocar este fetch.
+// tela de administração de tema. A identidade padrão do sistema é a NexStock;
+// todo tenant usa esse token a menos que tenha um override próprio configurado
+// (mecanismo mantido para clientes futuros, mas nenhum tenant usa hoje —
+// inclusive o Doce Encanto, que abriu mão da identidade caramelo/rosa própria
+// em favor do padrão). Trocar o default = trocar este import.
 async function carregarTokensDoTenant(): Promise<ThemeTokens> {
-  const mod = await import("../../themes/doce-encanto.tokens.json");
+  const mod = await import("../../themes/nexstock.tokens.json");
   return mod.tokens as ThemeTokens;
 }
 
@@ -43,6 +54,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.style.setProperty("--cor-texto-muted", t.cor_texto_muted);
       root.style.setProperty("--fonte-display", t.fonte_display);
       root.style.setProperty("--fonte-corpo", t.fonte_corpo);
+      if (t.cor_acento_soft) root.style.setProperty("--cor-acento-soft", t.cor_acento_soft);
+      if (t.cor_marca_azul) root.style.setProperty("--cor-marca-azul", t.cor_marca_azul);
+      if (t.cor_marca_gradiente_de) root.style.setProperty("--cor-marca-gradiente-de", t.cor_marca_gradiente_de);
+      if (t.cor_marca_gradiente_para) root.style.setProperty("--cor-marca-gradiente-para", t.cor_marca_gradiente_para);
     });
   }, []);
 

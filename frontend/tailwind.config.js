@@ -7,6 +7,8 @@ module.exports = {
         base: "var(--cor-base)",
         superficie: "var(--cor-superficie)",
         acento: "var(--cor-acento)",
+        "acento-soft": "var(--cor-acento-soft)",
+        "marca-azul": "var(--cor-marca-azul)",
         sucesso: "var(--cor-sucesso)",
         alerta: "var(--cor-alerta)",
         borda: "var(--cor-borda)",

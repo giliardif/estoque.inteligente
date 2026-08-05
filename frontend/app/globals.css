@@ -12,8 +12,8 @@ html,
 body {
   padding: 0;
   margin: 0;
-  background: var(--cor-base, #14110f);
-  color: var(--cor-texto, #f2eae1);
+  background: var(--cor-base, #0d182a);
+  color: var(--cor-texto, #f3f4f6);
   font-family: var(--fonte-corpo, "Manrope"), sans-serif;
 }
 

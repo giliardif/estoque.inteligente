@@ -828,3 +828,107 @@ exercitando RLS de verdade + bug real de contexto de tenant corrigido).
   entregue (pergunta em aberto de sessão anterior, ainda não
   respondida).
 
+## Etapa 15 — Rebranding NexStock (token padrão, login, sidebar)
+
+**Contexto:** o produto ganhou identidade de marca própria — NexStock —,
+deixando "Vektra Tech" descontinuada como marca-mãe e "Estoque
+Inteligente" rebaixado a slogan/tagline. Decisão do responsável pelo
+projeto: o sistema inteiro (login e painel interno de qualquer tenant,
+Doce Encanto incluso) passa a usar a paleta padrão NexStock por
+default; o Doce Encanto abre mão da identidade caramelo/rosa própria
+que tinha. A arquitetura de tokens JSON por tenant é mantida intacta
+como mecanismo de override para clientes futuros — hoje nenhum tenant
+usa customização, todos caem no default.
+
+**Entregue nesta etapa:**
+
+- `frontend/themes/nexstock.tokens.json` (novo) — token padrão do
+  sistema. Paleta: `#0D182A`/`#1B263B` (base/superfície escuros),
+  `#10B981`/`#34D399` (verde — accent funcional: botões primários,
+  foco de campo, links, estado ativo), `#2563EB` (azul — reservado ao
+  mark/gradiente de marca, não compete com o verde como cor de ação).
+  Tipografia de produto inalterada (Fraunces + Manrope); Poppins do
+  manual de marca não foi necessária no código porque a logo é
+  consumida como imagem (símbolo + wordmark já embutidos no PNG), não
+  como texto renderizado.
+- `frontend/lib/theme/useTheme.tsx` — `carregarTokensDoTenant` agora
+  importa `nexstock.tokens.json` como default do sistema (antes
+  apontava direto pro token do Doce Encanto). Tipo `ThemeTokens`
+  estendido com campos opcionais: `logo_tagline`, `logo_simbolo`,
+  `logo_completo`, `cor_marca_azul`, `cor_marca_gradiente_de/para`,
+  `cor_acento_soft` — todos opcionais para não quebrar tokens de tenant
+  mais antigos que não os definirem.
+- `frontend/public/brand/` (novo) — `nexstock-symbol.png` (símbolo
+  isolado: cubo + "N" + seta, recortado do arquivo enviado, atenção
+  redobrada para não cortar a ponta da seta/chevron direito — mesmo
+  cuidado já registrado em sessão anterior) e `nexstock-logo-full.png`
+  (wordmark completo, para uso futuro se necessário).
+- `frontend/app/login/page.tsx` — reconstruída seguindo a direção
+  aprovada em sessão anterior (variação B): fundo escuro com dois
+  glows radiais discretos (azul de marca no topo, verde perto do
+  rodapé), card translúcido com `backdrop-blur`, layout centralizado
+  (sem painel lateral de estatísticas — rejeitado antes por parecer
+  "template genérico de SaaS"), símbolo real da logo via `next/image`,
+  tagline "ESTOQUE INTELIGENTE" abaixo do nome. Botão primário e foco
+  de campo usam o verde (`--cor-acento`), não o azul.
+- `frontend/app/(dashboard)/layout.tsx` — sidebar com logo real no
+  lugar do ícone genérico (`Store` do Lucide), e item de menu ativo
+  agora destacado visualmente (texto + fundo em verde translúcido) via
+  `usePathname` — pequena melhora de UX que não existia antes, mantida
+  mínima e consistente com o resto do chrome.
+- `frontend/tailwind.config.js` — cores `acento-soft` e `marca-azul`
+  expostas como utilitários Tailwind.
+- `frontend/app/globals.css` — valores de fallback do CSS (antes de o
+  token carregar) atualizados pra paleta escura NexStock, evitando
+  flash da cor antiga (marrom do Doce Encanto) no primeiro render.
+
+**Verificação de segurança e testes (de praxe, mesmo em etapa
+frontend-only):**
+
+- Ambiente de Postgres 16 real provisionado neste sandbox (antes
+  inexistente) especificamente para rodar a suíte contra banco de
+  verdade, não só análise estática.
+- **100/100 testes passando**, roles restritos (`estoque_app_test` sem
+  `BYPASSRLS`, `estoque_auth_test` com `BYPASSRLS` escopado).
+- **Bandit: 0 issues.**
+- Nenhuma mudança de backend nesta etapa — os testes confirmam que o
+  rebranding (puramente frontend) não regrediu nada.
+- Build de produção do frontend (`next build`) rodado com sucesso, sem
+  erros de tipo, todas as 12 rotas geradas.
+
+**Correção de uma observação equivocada feita no início da sessão:**
+a branch `staging` no GitHub tinha só 2 commits, com o mais recente
+nomeado "Update asyncpg version to 0.30.0" — o nome sugeria que a
+Etapa 14 (RLS forçada) não tinha sido enviada. Confirmado, lendo o
+código de fato, que a Etapa 14 **já estava presente** (migration
+`009_force_rls.sql`, listener `after_begin` em `core/database.py`,
+`scripts/setup_test_db.sh` com roles restritos) — o commit só tinha
+uma mensagem que não refletia o conteúdo real. Não houve lacuna;
+alerta anterior foi um falso positivo.
+
+**Pendente, fora do escopo desta etapa:** não foi possível gerar
+screenshot real da tela renderizada neste sandbox (instalação do
+Chromium headless via Playwright falhou por bloqueio de rede a um
+repositório de terceiros; o pacote `chromium` do apt é só um wrapper
+de snap neste ambiente, sem binário real). Validação ficou restrita a
+build limpo + testes automatizados; recomenda-se conferência visual
+manual após aplicar os arquivos.
+
+**Entregável:** `frontend/themes/nexstock.tokens.json` (novo),
+`frontend/lib/theme/useTheme.tsx`, `frontend/app/login/page.tsx`,
+`frontend/app/(dashboard)/layout.tsx`, `frontend/tailwind.config.js`,
+`frontend/app/globals.css`, `frontend/public/brand/*.png` (novos) +
+`estoque-inteligente-scaffold.zip` (v15 — identidade NexStock aplicada
+a login, token padrão e chrome do painel).
+
+### Próximos passos (backlog, sem mudança)
+
+- Replicar o kit de UX nas telas restantes: Vendas, Notas, Compras,
+  Inventário, Alertas.
+- Seletor de depósito em entrada/saída/ajuste na tela de Movimentação.
+- Retomar a reconciliação do mockup v4 de Estoque (ainda em aberto).
+- Aplicar identidade NexStock nos pontos ainda não cobertos: favicon,
+  metadata/título de aba do navegador, e-mails transacionais (quando
+  existirem).
+
+
