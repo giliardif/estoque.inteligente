@@ -18,11 +18,20 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+# NOTA (pooler Supabase / Supavisor, modo transaction - porta 6543):
+# esse modo não suporta prepared statements. O asyncpg usa prepared
+# statements por padrão via cache interno — sem desligar isso aqui,
+# toda query falha com erro de prepared statement inexistente assim
+# que o pgbouncer reciclar a conexão física entre transações.
+# `statement_cache_size=0` desliga esse cache no nível do asyncpg.
+_POOLER_CONNECT_ARGS = {"statement_cache_size": 0}
+
 engine = create_async_engine(
     str(settings.DATABASE_URL),
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=5,
+    connect_args=_POOLER_CONNECT_ARGS,
     # echo=True apenas em desenvolvimento — nunca logar SQL (pode conter dados sensíveis) em produção
     echo=(settings.ENV == "development"),
 )
@@ -87,6 +96,7 @@ auth_engine = create_async_engine(
     str(settings.AUTH_DATABASE_URL or settings.DATABASE_URL),
     pool_pre_ping=True,
     pool_size=5,
+    connect_args=_POOLER_CONNECT_ARGS,
     echo=(settings.ENV == "development"),
 )
 AuthSessionLocal = async_sessionmaker(auth_engine, expire_on_commit=False, class_=AsyncSession)
