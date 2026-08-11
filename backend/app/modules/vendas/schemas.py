@@ -30,3 +30,29 @@ class VendaOut(BaseModel):
     itens: list[VendaItemOut]
 
     model_config = {"from_attributes": True}
+
+
+# --- Painel da tela de Vendas (Etapa 16) ------------------------------------
+
+class KpisVendasOut(BaseModel):
+    vendas_hoje: int
+    faturamento_hoje: float
+    ticket_medio_hoje: float
+    vendas_canceladas_total: int
+
+
+class VendaListaItemOut(BaseModel):
+    id: UUID
+    status: str
+    valor_total: float
+    qtd_itens: int
+    criado_em: datetime
+    finalizado_em: datetime | None
+
+
+class PainelVendasOut(BaseModel):
+    itens: list[VendaListaItemOut]
+    kpis: KpisVendasOut
+    total: int
+    pagina: int
+    tamanho: int

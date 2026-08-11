@@ -100,3 +100,31 @@ export type PainelProdutos = {
   pagina: number;
   tamanho: number;
 };
+
+// --- Painel da tela de Vendas -----------------------------------------------
+
+export type StatusVenda = "finalizada" | "cancelada";
+
+export type KpisVendas = {
+  vendas_hoje: number;
+  faturamento_hoje: number;
+  ticket_medio_hoje: number;
+  vendas_canceladas_total: number;
+};
+
+export type ItemVendaLista = {
+  id: string;
+  status: StatusVenda;
+  valor_total: number;
+  qtd_itens: number;
+  criado_em: string;
+  finalizado_em: string | null;
+};
+
+export type PainelVendas = {
+  itens: ItemVendaLista[];
+  kpis: KpisVendas;
+  total: number;
+  pagina: number;
+  tamanho: number;
+};

@@ -921,14 +921,110 @@ manual após aplicar os arquivos.
 `estoque-inteligente-scaffold.zip` (v15 — identidade NexStock aplicada
 a login, token padrão e chrome do painel).
 
+## Etapa 16 — Kit de UX aplicado na tela de Vendas
+
+**Escopo:** aplicar o kit reutilizável (Toast, ConfirmDialog,
+TableSkeletonRows, Pagination, cabeçalhos ordenáveis, seleção múltipla
++ BulkActionBar, RowMenu "⋮", useDebouncedValue, atalhos de teclado) no
+histórico de vendas, seguindo a ordem sugerida (Vendas → Notas Fiscais
+→ Compras → Inventário → Alertas). O carrinho/PDV (metade de cima da
+tela) foi mantido como estava — é um fluxo funcional de formulário, não
+uma lista, então não fazia sentido "kitificar".
+
+**Backend:**
+
+- `GET /vendas/painel` — endpoint dedicado, separado de `GET /vendas`
+  "cru" (mesmo padrão de `/estoque/painel` e `/produtos/painel`, para
+  não arriscar quebrar nenhum outro consumidor do endpoint simples,
+  mesmo não havendo hoje nenhum outro ponto da UI usando `/vendas`
+  como dropdown).
+  - KPIs sempre referentes a **hoje** (fixos, não afetados pelos
+    filtros da grade abaixo — mesmo princípio do painel de Estoque):
+    vendas hoje, faturamento hoje, ticket médio hoje, e total de
+    canceladas (todo o histórico, como sinal de atenção).
+  - Grade filtrável por período (`data_inicio`/`data_fim`), status
+    (`finalizada`/`cancelada`) e busca por nome/SKU de produto dentro
+    dos itens da venda (`EXISTS` correlacionado, tenant_id checado
+    também dentro da subquery — defesa em profundidade).
+  - Ordenação por `criado_em` ou `valor_total`, paginação com total
+    real.
+- `POST /vendas/{id}/cancelar` — **gap real fechado nesta etapa**: o
+  modelo `Venda` já previa o status `"cancelada"` desde sempre, mas
+  não existia nenhum caminho no sistema para chegar nele. Cancelamento
+  agora estorna automaticamente o estoque (uma "entrada" por item
+  vendido, com `origem="Cancelamento de venda"` e
+  `referencia_externa` apontando para a venda original — mesmo padrão
+  de rastreabilidade de `finalizar`). Só aceita vendas com status
+  `"finalizada"` (409 caso contrário); mesma exigência de perfil
+  (admin/operador) do endpoint de finalizar.
+- **Bug real corrigido:** `finalizado_em` nunca era preenchido ao
+  finalizar uma venda, apesar do campo existir na tabela desde a
+  migration original. Passou despercebido porque nada exibia ou
+  validava esse campo até o painel desta etapa precisar dele para o
+  detalhe da venda.
+
+**Frontend (`app/(dashboard)/vendas/page.tsx`):**
+
+- Histórico de vendas reescrito como tabela completa no padrão de
+  Estoque/Produtos: 4 cartões de KPI (o de "Canceladas" funciona como
+  atalho — clicar nele filtra a grade por `status=cancelada`, mesmo
+  padrão de toggle já usado no cartão "Abaixo do mínimo" de Estoque),
+  busca com debounce por produto/SKU, filtro de período (dois campos
+  de data) e filtro de status, cabeçalhos ordenáveis (Data/Hora, Valor
+  total), paginação real, seleção múltipla com exportação CSV das
+  vendas selecionadas via `BulkActionBar`.
+- RowMenu "⋮" por linha: "Ver detalhes" (abre modal simples com os
+  itens da venda, nomes resolvidos a partir da lista de produtos já
+  carregada para o carrinho) e "Cancelar venda" (só aparece se
+  `status === "finalizada"`; abre `ConfirmDialog` deixando explícito
+  que o estoque será estornado).
+- Atalho de teclado `/` foca a busca de produto do **carrinho** (não a
+  busca do histórico) — é o campo usado com muito mais frequência numa
+  tela de PDV. `Esc` fecha o modal de detalhes ou o `ConfirmDialog` de
+  cancelamento, o que estiver aberto. Atalho `N` não foi mapeado nesta
+  tela: não existe um formulário de "nova venda" separado do próprio
+  fluxo de carrinho, então forçar esse atalho não teria uma ação
+  natural para disparar.
+
+**Verificação de segurança e testes:**
+
+- Ambiente de Postgres 16 real (mesmo processo das etapas anteriores):
+  banco de testes recriado do zero com `scripts/setup_test_db.sh`,
+  roles restritos (`estoque_app_test` sem `BYPASSRLS`, usado pela
+  suíte via `DATABASE_URL`).
+- **11 testes novos** em `tests/test_vendas_painel.py`: KPIs de hoje,
+  correção do `finalizado_em`, filtro de período/status/busca,
+  ordenação, isolamento entre tenants no painel, estorno de estoque no
+  cancelamento (saldo volta exatamente ao valor anterior à venda),
+  rejeição de cancelar venda já cancelada (409), rejeição de cancelar
+  venda de outro tenant (404), e bloqueio de perfil leitura (403) —
+  com verificação de que nada foi alterado na tentativa negada.
+- **111/111 testes passando** (100 anteriores + 11 novos, nenhuma
+  regressão).
+- **Bandit: 0 issues** (2927 linhas escaneadas em `app/`).
+- `npx tsc --noEmit` limpo e `next build` completo rodado com sucesso
+  (12 rotas geradas, incluindo `/vendas` com o novo painel).
+
+**Entregável:** `backend/app/modules/vendas/service.py`,
+`backend/app/modules/vendas/schemas.py`,
+`backend/app/modules/vendas/router.py`,
+`backend/tests/test_vendas_painel.py` (novo),
+`frontend/lib/types.ts`, `frontend/app/(dashboard)/vendas/page.tsx`
+(reescrito) + `estoque-inteligente-scaffold.zip` (v16 — kit de UX em
+Vendas, cancelamento de venda com estorno, bug do `finalizado_em`
+corrigido).
+
 ### Próximos passos (backlog, sem mudança)
 
-- Replicar o kit de UX nas telas restantes: Vendas, Notas, Compras,
+- Replicar o kit de UX nas telas restantes: Notas Fiscais, Compras,
   Inventário, Alertas.
 - Seletor de depósito em entrada/saída/ajuste na tela de Movimentação.
 - Retomar a reconciliação do mockup v4 de Estoque (ainda em aberto).
 - Aplicar identidade NexStock nos pontos ainda não cobertos: favicon,
   metadata/título de aba do navegador, e-mails transacionais (quando
   existirem).
+- Bug conhecido do `asyncpg`/`search_path` no Railway (staging), ainda
+  não resolvido — ver seção de aprendizados/pendências combinada com
+  Giliardi.
 
 
