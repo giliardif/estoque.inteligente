@@ -136,7 +136,7 @@ export default function AlertasPage() {
           {regras.map((r) => {
             const chaveParam = PARAM_KEY[r.tipo];
             return (
-              <div key={r.id} className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid #221D18" }}>
+              <div key={r.id} className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid var(--cor-borda)" }}>
                 <span className="text-sm flex-1">{TIPO_LABEL[r.tipo] ?? r.tipo}</span>
                 {chaveParam && (
                   <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--cor-texto-muted)" }}>
@@ -184,7 +184,7 @@ export default function AlertasPage() {
           >
             <span
               className="text-xs font-semibold px-2 py-1 rounded-full shrink-0"
-              style={{ color: "var(--cor-acento)", background: "rgba(201,134,43,0.14)" }}
+              style={{ color: "var(--cor-acento)", background: "rgba(16,185,129,0.14)" }}
             >
               {TIPO_LABEL[a.tipo] ?? a.tipo}
             </span>

@@ -152,7 +152,7 @@ export default function InventarioPage() {
             </thead>
             <tbody>
               {produtos.map((p) => (
-                <tr key={p.id} style={{ borderTop: "1px solid #221D18" }}>
+                <tr key={p.id} style={{ borderTop: "1px solid var(--cor-borda)" }}>
                   <td className="px-5 py-2">{p.nome}</td>
                   <td className="px-3 py-2">
                     <input
@@ -187,7 +187,7 @@ export default function InventarioPage() {
             </thead>
             <tbody>
               {historico.map((inv) => (
-                <tr key={inv.id} style={{ borderTop: "1px solid #221D18" }}>
+                <tr key={inv.id} style={{ borderTop: "1px solid var(--cor-borda)" }}>
                   <td className="px-5 py-2.5">{inv.ciclo}</td>
                   <td className="px-3 py-2.5" style={{ color: "var(--cor-texto-muted)" }}>
                     {new Date(inv.criado_em).toLocaleDateString("pt-BR")}

@@ -134,7 +134,7 @@ function MovimentacaoConteudo() {
                 className="flex-1 rounded-md py-2 text-xs font-semibold border"
                 style={
                   tipo === t.valor
-                    ? { background: "rgba(201,134,43,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
+                    ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
                     : { background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }
                 }
               >
@@ -268,7 +268,7 @@ function MovimentacaoConteudo() {
                 <tr><td className="px-5 py-6 text-center" style={{ color: "var(--cor-texto-muted)" }}>Nenhuma movimentação ainda.</td></tr>
               )}
               {historico.map((m) => (
-                <tr key={m.id} style={{ borderBottom: "1px solid #221D18" }}>
+                <tr key={m.id} style={{ borderBottom: "1px solid var(--cor-borda)" }}>
                   <td className="px-5 py-2.5">{nomeProduto(m.produto_id)}</td>
                   <td className="px-3 py-2.5">
                     <span

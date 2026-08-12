@@ -150,9 +150,9 @@ export default function ProdutosPage() {
         </p>
       </div>
 
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[280px]">
-          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 w-72"
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:flex-wrap md:flex-1 md:min-w-[280px]">
+          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 w-full md:w-72"
             style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
             <Search size={15} style={{ color: "var(--cor-texto-muted)" }} />
             <input
@@ -164,51 +164,53 @@ export default function ProdutosPage() {
             />
           </div>
 
-          <div className="flex items-center gap-1">
-            <select
-              value={categoriaId}
-              onChange={(e) => setCategoriaId(e.target.value)}
-              className="rounded-md px-2.5 py-2 text-xs font-semibold border outline-none"
-              style={{
-                background: categoriaId ? "rgba(201,134,43,0.14)" : "var(--cor-superficie)",
-                borderColor: categoriaId ? "var(--cor-acento)" : "var(--cor-borda)",
-                color: categoriaId ? "var(--cor-acento)" : "var(--cor-texto-muted)",
-              }}
-            >
-              <option value="">Categoria</option>
-              {(painel?.filtros.categorias ?? []).map((c) => (
-                <option key={c.id} value={c.id}>{c.nome}</option>
-              ))}
-            </select>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:contents">
+            <div className="flex items-center gap-1 shrink-0">
+              <select
+                value={categoriaId}
+                onChange={(e) => setCategoriaId(e.target.value)}
+                className="rounded-md px-2.5 py-2 text-xs font-semibold border outline-none"
+                style={{
+                  background: categoriaId ? "rgba(16,185,129,0.14)" : "var(--cor-superficie)",
+                  borderColor: categoriaId ? "var(--cor-acento)" : "var(--cor-borda)",
+                  color: categoriaId ? "var(--cor-acento)" : "var(--cor-texto-muted)",
+                }}
+              >
+                <option value="">Categoria</option>
+                {(painel?.filtros.categorias ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setCriarCategoria(true)}
+                title="Nova categoria"
+                className="rounded-md p-2 border"
+                style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+              >
+                <Plus size={13} />
+              </button>
+            </div>
+
             <button
-              onClick={() => setCriarCategoria(true)}
-              title="Nova categoria"
-              className="rounded-md p-2 border"
-              style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+              onClick={() => setSomenteInativos((v) => !v)}
+              className="rounded-md px-3 py-2 text-xs font-semibold border whitespace-nowrap shrink-0"
+              style={
+                somenteInativos
+                  ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
+                  : { background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }
+              }
             >
-              <Plus size={13} />
+              Mostrar inativos
             </button>
           </div>
-
-          <button
-            onClick={() => setSomenteInativos((v) => !v)}
-            className="rounded-md px-3 py-2 text-xs font-semibold border whitespace-nowrap"
-            style={
-              somenteInativos
-                ? { background: "rgba(201,134,43,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
-                : { background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }
-            }
-          >
-            Mostrar inativos
-          </button>
         </div>
 
         <button
           onClick={() => setMostrarForm((v) => !v)}
-          className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold"
+          className="flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2.5 md:py-2 text-sm font-bold"
           style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
         >
-          <Plus size={15} /> Novo produto <span className="opacity-60 text-xs">(N)</span>
+          <Plus size={15} /> Novo produto <span className="opacity-60 text-xs hidden md:inline">(N)</span>
         </button>
       </div>
 
@@ -228,7 +230,92 @@ export default function ProdutosPage() {
         acoes={[{ label: "Exportar selecionados", icon: <Download size={13} />, onClick: exportarSelecionados }]}
       />
 
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--cor-borda)" }}>
+      {/* Lista de cards — mobile apenas. Mesmos dados e ações da tabela abaixo. */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {carregando && Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-xl border p-3.5 h-24 animate-pulse" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-superficie)" }} />
+        ))}
+        {!carregando && itens.length === 0 && (
+          <div className="rounded-xl border px-5 py-8 text-center text-sm" style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}>
+            {painel && painel.total === 0 && !buscaDebounced && !categoriaId && !somenteInativos
+              ? "Nenhum produto cadastrado ainda."
+              : "Nenhum produto encontrado com esses filtros."}
+          </div>
+        )}
+        {!carregando && itens.map((p) => (
+          <div
+            key={p.id}
+            className="rounded-xl border p-3.5 flex flex-col gap-2.5"
+            style={{
+              background: "var(--cor-superficie)",
+              borderColor: selecao.selecionados.has(p.id) ? "var(--cor-acento)" : "var(--cor-borda)",
+            }}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <input
+                  type="checkbox"
+                  className="mt-1 shrink-0"
+                  checked={selecao.selecionados.has(p.id)}
+                  onChange={() => selecao.alternar(p.id)}
+                  aria-label={`Selecionar ${p.nome}`}
+                />
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate">{p.nome}</div>
+                  <div className="text-xs truncate" style={{ color: "var(--cor-texto-muted)" }}>
+                    {p.sku ?? "—"}{p.categoria_nome ? ` · ${p.categoria_nome}` : ""}
+                  </div>
+                </div>
+              </div>
+              <RowMenu
+                itens={[
+                  { label: "Editar", icon: <Pencil size={13} />, onClick: () => setProdutoEditando(p) },
+                  ...(p.ativo
+                    ? [{ label: "Desativar produto", perigoso: true, onClick: () => setProdutoParaDesativar(p) }]
+                    : []),
+                ]}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span
+                className="text-xs font-semibold px-2 py-1 rounded-full"
+                style={
+                  p.ativo
+                    ? { color: "var(--cor-sucesso)", background: "rgba(91,140,99,0.14)" }
+                    : { color: "var(--cor-texto-muted)", background: "rgba(138,127,115,0.14)" }
+                }
+              >
+                {p.ativo ? "Ativo" : "Inativo"}
+              </span>
+              <span className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>{p.unidade_medida}</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t text-xs" style={{ borderColor: "var(--cor-borda)" }}>
+              <div>
+                <div style={{ color: "var(--cor-texto-muted)" }}>Custo médio</div>
+                <div className="font-medium mt-0.5">R$ {p.custo_medio.toFixed(2)}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--cor-texto-muted)" }}>Mínimo</div>
+                <div className="font-medium mt-0.5">{p.estoque_minimo}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--cor-texto-muted)" }}>Código</div>
+                <div className="font-medium mt-0.5 truncate">{p.codigo_barras ?? "—"}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {painel && painel.total > 0 && (
+          <div className="rounded-xl border" style={{ borderColor: "var(--cor-borda)" }}>
+            <Pagination pagina={pagina} tamanhoPagina={TAMANHO_PAGINA} total={painel.total} onPaginaChange={setPagina} />
+          </div>
+        )}
+      </div>
+
+      {/* Tabela — desktop apenas */}
+      <div className="hidden md:block rounded-xl border overflow-hidden" style={{ borderColor: "var(--cor-borda)" }}>
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--cor-borda)" }}>
@@ -306,8 +393,8 @@ export default function ProdutosPage() {
       </div>
 
       {produtoEditando && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4" style={{ background: "rgba(10,8,6,0.55)" }} onClick={() => setProdutoEditando(null)}>
-          <div onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-6 overflow-y-auto" style={{ background: "rgba(10,8,6,0.55)" }} onClick={() => setProdutoEditando(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md max-h-full overflow-y-auto">
             <ProdutoForm
               produto={{
                 id: produtoEditando.id, tenant_id: "", nome: produtoEditando.nome, sku: produtoEditando.sku,

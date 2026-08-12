@@ -215,7 +215,7 @@ export default function VendasPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-2">
         <div className="rounded-xl border p-5" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
           <div className="flex items-center gap-2 rounded-md border px-3 py-2 mb-3" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-base)" }}>
             <ScanBarcode size={15} style={{ color: "var(--cor-acento)" }} />
@@ -256,15 +256,15 @@ export default function VendasPage() {
 
           <div className="flex flex-col gap-2">
             {carrinho.map((i) => (
-              <div key={i.produto_id} className="flex items-center gap-3 text-sm border-b pb-2" style={{ borderColor: "#221D18" }}>
-                <span className="flex-1">{i.nome}</span>
-                <div className="flex items-center gap-2 rounded-md border px-2 py-1" style={{ borderColor: "var(--cor-borda)" }}>
+              <div key={i.produto_id} className="flex items-center gap-3 text-sm border-b pb-2" style={{ borderColor: "var(--cor-borda)" }}>
+                <span className="flex-1 truncate">{i.nome}</span>
+                <div className="flex items-center gap-2 rounded-md border px-2 py-1 shrink-0" style={{ borderColor: "var(--cor-borda)" }}>
                   <button onClick={() => alterarQtd(i.produto_id, -1)}><Minus size={13} /></button>
                   <span>{i.quantidade}</span>
                   <button onClick={() => alterarQtd(i.produto_id, 1)}><Plus size={13} /></button>
                 </div>
-                <span className="font-semibold w-16 text-right">R$ {(i.quantidade * i.preco_unitario).toFixed(2)}</span>
-                <button onClick={() => remover(i.produto_id)} style={{ color: "var(--cor-texto-muted)" }}>
+                <span className="font-semibold w-16 text-right shrink-0">R$ {(i.quantidade * i.preco_unitario).toFixed(2)}</span>
+                <button onClick={() => remover(i.produto_id)} className="shrink-0" style={{ color: "var(--cor-texto-muted)" }}>
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -289,7 +289,7 @@ export default function VendasPage() {
 
       {/* --- Histórico de vendas (kit de UX) --- */}
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
         <CartaoKpi titulo="Vendas hoje" valor={kpis ? String(kpis.vendas_hoje) : "—"} />
         <CartaoKpi titulo="Faturamento hoje" valor={kpis ? formatarMoeda(kpis.faturamento_hoje) : "—"} />
         <CartaoKpi titulo="Ticket médio hoje" valor={kpis ? formatarMoeda(kpis.ticket_medio_hoje) : "—"} />
@@ -301,9 +301,9 @@ export default function VendasPage() {
         />
       </div>
 
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[280px]">
-          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 w-64"
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:flex-wrap md:flex-1 md:min-w-[280px]">
+          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 w-full md:w-64"
             style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
             <Search size={15} style={{ color: "var(--cor-texto-muted)" }} />
             <input
@@ -314,36 +314,38 @@ export default function VendasPage() {
             />
           </div>
 
-          <input
-            type="date"
-            value={dataInicio}
-            onChange={(e) => setDataInicio(e.target.value)}
-            className="rounded-md px-2.5 py-2 text-xs border outline-none"
-            style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
-          />
-          <span className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>até</span>
-          <input
-            type="date"
-            value={dataFim}
-            onChange={(e) => setDataFim(e.target.value)}
-            className="rounded-md px-2.5 py-2 text-xs border outline-none"
-            style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
-          />
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:contents">
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              className="rounded-md px-2.5 py-2 text-xs border outline-none shrink-0"
+              style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+            />
+            <span className="text-xs shrink-0" style={{ color: "var(--cor-texto-muted)" }}>até</span>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+              className="rounded-md px-2.5 py-2 text-xs border outline-none shrink-0"
+              style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+            />
 
-          <select
-            value={statusFiltro}
-            onChange={(e) => setStatusFiltro(e.target.value as "" | StatusVenda)}
-            className="rounded-md px-2.5 py-2 text-xs font-semibold border outline-none"
-            style={{
-              background: statusFiltro ? "rgba(201,134,43,0.14)" : "var(--cor-superficie)",
-              borderColor: statusFiltro ? "var(--cor-acento)" : "var(--cor-borda)",
-              color: statusFiltro ? "var(--cor-acento)" : "var(--cor-texto-muted)",
-            }}
-          >
-            <option value="">Todos os status</option>
-            <option value="finalizada">Finalizada</option>
-            <option value="cancelada">Cancelada</option>
-          </select>
+            <select
+              value={statusFiltro}
+              onChange={(e) => setStatusFiltro(e.target.value as "" | StatusVenda)}
+              className="rounded-md px-2.5 py-2 text-xs font-semibold border outline-none shrink-0"
+              style={{
+                background: statusFiltro ? "rgba(16,185,129,0.14)" : "var(--cor-superficie)",
+                borderColor: statusFiltro ? "var(--cor-acento)" : "var(--cor-borda)",
+                color: statusFiltro ? "var(--cor-acento)" : "var(--cor-texto-muted)",
+              }}
+            >
+              <option value="">Todos os status</option>
+              <option value="finalizada">Finalizada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -359,7 +361,75 @@ export default function VendasPage() {
         acoes={[{ label: "Exportar selecionadas", icon: <Download size={13} />, onClick: exportarSelecionados }]}
       />
 
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--cor-borda)" }}>
+      {/* Lista de cards — mobile apenas. Mesmos dados e ações da tabela abaixo. */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {carregandoPainel && Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-xl border p-3.5 h-20 animate-pulse" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-superficie)" }} />
+        ))}
+        {!carregandoPainel && itensHistorico.length === 0 && (
+          <div className="rounded-xl border px-5 py-8 text-center text-sm" style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}>
+            {painel && painel.total === 0 && !buscaHistoricoDebounced && !dataInicio && !dataFim && !statusFiltro
+              ? "Nenhuma venda registrada ainda."
+              : "Nenhuma venda encontrada com esses filtros."}
+          </div>
+        )}
+        {!carregandoPainel && itensHistorico.map((v) => (
+          <div
+            key={v.id}
+            onClick={() => abrirDetalhes(v)}
+            className="rounded-xl border p-3.5 flex flex-col gap-2.5"
+            style={{
+              background: "var(--cor-superficie)",
+              borderColor: selecao.selecionados.has(v.id) ? "var(--cor-acento)" : "var(--cor-borda)",
+            }}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <input
+                  type="checkbox"
+                  className="mt-1 shrink-0"
+                  checked={selecao.selecionados.has(v.id)}
+                  onChange={() => selecao.alternar(v.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Selecionar venda de ${new Date(v.criado_em).toLocaleString("pt-BR")}`}
+                />
+                <div className="min-w-0">
+                  <div className="font-medium text-sm">{new Date(v.criado_em).toLocaleString("pt-BR")}</div>
+                  <div className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>{v.qtd_itens} item(ns)</div>
+                </div>
+              </div>
+              <div onClick={(e) => e.stopPropagation()}>
+                <RowMenu
+                  itens={[
+                    { label: "Ver detalhes", icon: <Eye size={13} />, onClick: () => abrirDetalhes(v) },
+                    ...(v.status === "finalizada"
+                      ? [{ label: "Cancelar venda", icon: <Ban size={13} />, perigoso: true, onClick: () => setVendaParaCancelar(v) }]
+                      : []),
+                  ]}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span
+                className="text-xs font-semibold px-2 py-1 rounded-full"
+                style={{ color: STATUS_INFO[v.status].cor, background: STATUS_INFO[v.status].bg }}
+              >
+                {STATUS_INFO[v.status].label}
+              </span>
+              <span className="font-semibold text-sm">{formatarMoeda(v.valor_total)}</span>
+            </div>
+          </div>
+        ))}
+        {painel && painel.total > 0 && (
+          <div className="rounded-xl border" style={{ borderColor: "var(--cor-borda)" }}>
+            <Pagination pagina={pagina} tamanhoPagina={TAMANHO_PAGINA} total={painel.total} onPaginaChange={setPagina} />
+          </div>
+        )}
+      </div>
+
+      {/* Tabela — desktop apenas */}
+      <div className="hidden md:block rounded-xl border overflow-hidden" style={{ borderColor: "var(--cor-borda)" }}>
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--cor-borda)" }}>
@@ -425,10 +495,10 @@ export default function VendasPage() {
       </div>
 
       {vendaDetalhes && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4" style={{ background: "rgba(10,8,6,0.55)" }} onClick={() => setVendaDetalhes(null)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-6 overflow-y-auto" style={{ background: "rgba(10,8,6,0.55)" }} onClick={() => setVendaDetalhes(null)}>
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-xl border p-5 flex flex-col gap-3 shadow-xl"
+            className="w-full max-w-md max-h-full overflow-y-auto rounded-xl border p-5 flex flex-col gap-3 shadow-xl"
             style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}
           >
             <div>
@@ -446,10 +516,10 @@ export default function VendasPage() {
             {itensDetalhes && (
               <div className="flex flex-col gap-1">
                 {itensDetalhes.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-sm border-b py-2" style={{ borderColor: "#221D18" }}>
-                    <span>{nomeProduto(item.produto_id)}</span>
-                    <span style={{ color: "var(--cor-texto-muted)" }}>{item.quantidade}x R$ {item.preco_unitario.toFixed(2)}</span>
-                    <span className="font-semibold">R$ {(item.quantidade * item.preco_unitario).toFixed(2)}</span>
+                  <div key={idx} className="flex items-center justify-between gap-2 text-sm border-b py-2" style={{ borderColor: "var(--cor-borda)" }}>
+                    <span className="truncate">{nomeProduto(item.produto_id)}</span>
+                    <span className="shrink-0 whitespace-nowrap" style={{ color: "var(--cor-texto-muted)" }}>{item.quantidade}x R$ {item.preco_unitario.toFixed(2)}</span>
+                    <span className="font-semibold shrink-0 whitespace-nowrap">R$ {(item.quantidade * item.preco_unitario).toFixed(2)}</span>
                   </div>
                 ))}
               </div>

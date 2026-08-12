@@ -143,7 +143,7 @@ export default function NotasPage() {
             </thead>
             <tbody>
               {itens.map((i) => (
-                <tr key={i.id} style={{ borderTop: "1px solid #221D18" }}>
+                <tr key={i.id} style={{ borderTop: "1px solid var(--cor-borda)" }}>
                   <td className="px-5 py-2.5">{i.descricao_xml}</td>
                   <td className="px-3 py-2.5">{i.quantidade}</td>
                   <td className="px-3 py-2.5" style={{ color: "var(--cor-texto-muted)" }}>R$ {i.valor_unitario.toFixed(2)}</td>
@@ -155,7 +155,7 @@ export default function NotasPage() {
                           ? { color: "var(--cor-sucesso)", background: "rgba(91,140,99,0.14)" }
                           : i.status_match === "ignorado"
                           ? { color: "var(--cor-texto-muted)", background: "rgba(138,127,115,0.14)" }
-                          : { color: "var(--cor-acento)", background: "rgba(201,134,43,0.14)" }
+                          : { color: "var(--cor-acento)", background: "rgba(16,185,129,0.14)" }
                       }
                     >
                       {i.status_match === "reconhecido" ? "Reconhecido" : i.status_match === "ignorado" ? "Ignorado" : "Aguardando cadastro"}
@@ -196,7 +196,7 @@ export default function NotasPage() {
             </thead>
             <tbody>
               {historico.map((n) => (
-                <tr key={n.id} style={{ borderTop: "1px solid #221D18" }}>
+                <tr key={n.id} style={{ borderTop: "1px solid var(--cor-borda)" }}>
                   <td className="px-5 py-2.5">{n.numero}</td>
                   <td className="px-3 py-2.5" style={{ color: "var(--cor-texto-muted)" }}>{n.fornecedor_nome ?? "—"}</td>
                   <td className="px-3 py-2.5" style={{ color: "var(--cor-texto-muted)" }}>
@@ -204,7 +204,7 @@ export default function NotasPage() {
                   </td>
                   <td className="px-3 py-2.5">
                     {n.itens_pendentes > 0 ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-acento)", background: "rgba(201,134,43,0.14)" }}>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-acento)", background: "rgba(16,185,129,0.14)" }}>
                         {n.itens_pendentes} pendente(s)
                       </span>
                     ) : (

@@ -6,7 +6,7 @@ export function TableSkeletonRows({ colunas, linhas = 5 }: { colunas: number; li
   return (
     <>
       {Array.from({ length: linhas }).map((_, i) => (
-        <tr key={i} style={{ borderBottom: "1px solid #221D18" }}>
+        <tr key={i} style={{ borderBottom: "1px solid var(--cor-borda)" }}>
           {Array.from({ length: colunas }).map((_, j) => (
             <td key={j} className="px-5 py-3.5">
               <div

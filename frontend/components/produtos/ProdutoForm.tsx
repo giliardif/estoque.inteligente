@@ -55,7 +55,7 @@ export function ProdutoForm({
         </div>
       )}
       <Campo label="Nome" required value={form.nome} onChange={(v) => setForm({ ...form, nome: v })} />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Campo
           label="SKU"
           value={form.sku ?? ""}
@@ -68,7 +68,7 @@ export function ProdutoForm({
         value={form.codigo_barras ?? ""}
         onChange={(v) => setForm({ ...form, codigo_barras: v })}
       />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Campo
           label="Custo médio"
           type="number"

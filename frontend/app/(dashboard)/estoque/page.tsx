@@ -223,7 +223,7 @@ export default function EstoquePage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5 md:gap-3">
         <CartaoKpi titulo="Produtos cadastrados" valor={kpis ? String(kpis.produtos_cadastrados) : "—"} />
         <CartaoKpi titulo="Total de unidades" valor={kpis ? formatarNumero(kpis.total_unidades) : "—"} />
         <CartaoKpi titulo="Valor total a custo" valor={kpis ? formatarMoeda(kpis.valor_total_custo) : "—"} />
@@ -241,7 +241,7 @@ export default function EstoquePage() {
         />
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible">
         <AcaoRapida icon={<ArrowDownToLine size={14} />} label="Entrada" onClick={() => router.push("/movimentacao?tipo=entrada")} />
         <AcaoRapida icon={<ArrowUpFromLine size={14} />} label="Saída" onClick={() => router.push("/movimentacao?tipo=saida")} />
         <AcaoRapida icon={<ArrowLeftRight size={14} />} label="Transferência" onClick={() => router.push("/movimentacao?tipo=transferencia")} />
@@ -249,9 +249,9 @@ export default function EstoquePage() {
         <AcaoRapida icon={<ClipboardList size={14} />} label="Inventário" onClick={() => router.push("/inventario")} />
       </div>
 
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[280px]">
-          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 w-72"
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:flex-wrap md:flex-1 md:min-w-[280px]">
+          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 w-full md:w-72"
             style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
             <Search size={15} style={{ color: "var(--cor-texto-muted)" }} />
             <input
@@ -263,31 +263,33 @@ export default function EstoquePage() {
             />
           </div>
 
-          <SeletorFiltro
-            label="Categoria" valor={categoriaId} onChange={setCategoriaId}
-            opcoes={painel?.filtros.categorias ?? []} onCriarNovo={() => setCriarRapido("categoria")}
-          />
-          <SeletorFiltro
-            label="Depósito" valor={depositoId} onChange={setDepositoId}
-            opcoes={painel?.filtros.depositos ?? []} onCriarNovo={() => setCriarRapido("deposito")}
-          />
-          <SeletorFiltro
-            label="Fornecedor" valor={fornecedorId} onChange={setFornecedorId}
-            opcoes={painel?.filtros.fornecedores ?? []} onCriarNovo={() => setCriarRapido("fornecedor")}
-          />
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:contents">
+            <SeletorFiltro
+              label="Categoria" valor={categoriaId} onChange={setCategoriaId}
+              opcoes={painel?.filtros.categorias ?? []} onCriarNovo={() => setCriarRapido("categoria")}
+            />
+            <SeletorFiltro
+              label="Depósito" valor={depositoId} onChange={setDepositoId}
+              opcoes={painel?.filtros.depositos ?? []} onCriarNovo={() => setCriarRapido("deposito")}
+            />
+            <SeletorFiltro
+              label="Fornecedor" valor={fornecedorId} onChange={setFornecedorId}
+              opcoes={painel?.filtros.fornecedores ?? []} onCriarNovo={() => setCriarRapido("fornecedor")}
+            />
 
-          <ChipFiltro
-            label="Vencimento próximo"
-            ativo={somenteVencimentoProximo}
-            onClick={() => setSomenteVencimentoProximo((v) => !v)}
-          />
+            <ChipFiltro
+              label="Vencimento próximo"
+              ativo={somenteVencimentoProximo}
+              onClick={() => setSomenteVencimentoProximo((v) => !v)}
+            />
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:overflow-visible md:flex-wrap">
           <button
             onClick={carregar}
             title="Atualizar"
-            className="rounded-md p-2 border"
+            className="rounded-md p-2 border shrink-0"
             style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
           >
             <RefreshCw size={15} className={carregando ? "animate-spin" : ""} />
@@ -295,21 +297,21 @@ export default function EstoquePage() {
           <button
             onClick={exportarTudo}
             disabled={exportando}
-            className="flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold border disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold border disabled:opacity-60 shrink-0 whitespace-nowrap"
             style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
           >
             <FileDown size={14} /> {exportando ? "Exportando..." : "Exportar Excel"}
           </button>
           <button
             onClick={() => toastErro("Importação de planilha ainda não está disponível nesta versão.")}
-            className="flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold border"
+            className="flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold border shrink-0 whitespace-nowrap"
             style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
           >
             <Upload size={14} /> Importar
           </button>
           <button
             onClick={() => setMostrarForm((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold"
+            className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold shrink-0 whitespace-nowrap"
             style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
           >
             <Plus size={15} /> Novo produto <span className="opacity-60 text-xs">(N)</span>
@@ -339,7 +341,101 @@ export default function EstoquePage() {
         acoes={[{ label: "Exportar selecionados", icon: <Download size={13} />, onClick: exportarSelecionados }]}
       />
 
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--cor-borda)" }}>
+      {/* Lista de cards — mobile apenas. Mesmos dados e ações da tabela abaixo. */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {carregando && Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-xl border p-3.5 h-28 animate-pulse" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-superficie)" }} />
+        ))}
+        {!carregando && itens.length === 0 && (
+          <div className="rounded-xl border px-5 py-8 text-center text-sm" style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}>
+            {painel && painel.total === 0 && !buscaDebounced && !categoriaId && !depositoId && !fornecedorId
+              ? "Nenhum produto cadastrado ainda."
+              : "Nenhum produto encontrado com esses filtros."}
+          </div>
+        )}
+        {!carregando && itens.map((item) => {
+          const prio = PRIORIDADE_INFO[item.prioridade];
+          return (
+            <div
+              key={item.produto_id}
+              className="rounded-xl border p-3.5 flex flex-col gap-2.5"
+              style={{
+                background: "var(--cor-superficie)",
+                borderColor: selecao.selecionados.has(item.produto_id) ? "var(--cor-acento)" : "var(--cor-borda)",
+              }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <input
+                    type="checkbox"
+                    className="mt-1 shrink-0"
+                    checked={selecao.selecionados.has(item.produto_id)}
+                    onChange={() => selecao.alternar(item.produto_id)}
+                    aria-label={`Selecionar ${item.nome}`}
+                  />
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">{item.nome}</div>
+                    <div className="text-xs truncate" style={{ color: "var(--cor-texto-muted)" }}>
+                      {item.sku ?? "—"}{item.categoria_nome ? ` · ${item.categoria_nome}` : ""}
+                    </div>
+                  </div>
+                </div>
+                <RowMenu
+                  itens={[
+                    { label: "Ver histórico", onClick: () => router.push(`/movimentacao?produto_id=${item.produto_id}`) },
+                    { label: "Registrar entrada", onClick: () => router.push(`/movimentacao?tipo=entrada&produto_id=${item.produto_id}`) },
+                    { label: "Registrar saída", onClick: () => router.push(`/movimentacao?tipo=saida&produto_id=${item.produto_id}`) },
+                    { label: "Desativar produto", perigoso: true, onClick: () => setProdutoParaDesativar(item) },
+                  ]}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full"
+                  style={{ color: prio.cor, background: prio.bg }}
+                >
+                  {prio.emoji} {prio.label}
+                </span>
+                <span className="font-semibold text-sm">
+                  {item.saldo} <span className="font-normal text-xs" style={{ color: "var(--cor-texto-muted)" }}>{item.unidade_medida}</span>
+                </span>
+              </div>
+
+              <div className={`grid gap-2 pt-2 border-t text-xs ${usaDepositos ? "grid-cols-2" : "grid-cols-3"}`} style={{ borderColor: "var(--cor-borda)" }}>
+                <div>
+                  <div style={{ color: "var(--cor-texto-muted)" }}>Custo médio</div>
+                  <div className="font-medium mt-0.5">{formatarMoeda(item.custo_medio)}</div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--cor-texto-muted)" }}>Valor total</div>
+                  <div className="font-medium mt-0.5">{formatarMoeda(item.valor_total_custo)}</div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--cor-texto-muted)" }}>Mínimo</div>
+                  <div className="font-medium mt-0.5">{item.estoque_minimo}</div>
+                </div>
+                {usaDepositos && (
+                  <div>
+                    <div style={{ color: "var(--cor-texto-muted)" }}>Posição</div>
+                    <div className="font-medium mt-0.5">
+                      {item.posicoes.length === 0 ? "—" : item.posicoes.map((p) => `${p.deposito_nome} (${p.saldo})`).join(", ")}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {painel && painel.total > 0 && (
+          <div className="rounded-xl border" style={{ borderColor: "var(--cor-borda)" }}>
+            <Pagination pagina={pagina} tamanhoPagina={TAMANHO_PAGINA} total={painel.total} onPaginaChange={setPagina} />
+          </div>
+        )}
+      </div>
+
+      {/* Tabela — desktop apenas */}
+      <div className="hidden md:block rounded-xl border overflow-hidden" style={{ borderColor: "var(--cor-borda)" }}>
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--cor-borda)" }}>
@@ -502,7 +598,7 @@ function ChipFiltro({ label, ativo, onClick }: { label: string; ativo: boolean; 
       className="rounded-md px-3 py-2 text-xs font-semibold border whitespace-nowrap"
       style={
         ativo
-          ? { background: "rgba(201,134,43,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
+          ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
           : { background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }
       }
     >
@@ -522,7 +618,7 @@ function SeletorFiltro({
         onChange={(e) => onChange(e.target.value)}
         className="rounded-md px-2.5 py-2 text-xs font-semibold border outline-none"
         style={{
-          background: valor ? "rgba(201,134,43,0.14)" : "var(--cor-superficie)",
+          background: valor ? "rgba(16,185,129,0.14)" : "var(--cor-superficie)",
           borderColor: valor ? "var(--cor-acento)" : "var(--cor-borda)",
           color: valor ? "var(--cor-acento)" : "var(--cor-texto-muted)",
         }}

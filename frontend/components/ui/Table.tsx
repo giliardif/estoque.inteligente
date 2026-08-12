@@ -72,8 +72,8 @@ export function TrHover({
       onClick={onClick}
       className="transition-colors"
       style={{
-        borderBottom: "1px solid #221D18",
-        background: selecionada ? "rgba(196,140,60,0.08)" : "transparent",
+        borderBottom: "1px solid var(--cor-borda)",
+        background: selecionada ? "rgba(16,185,129,0.08)" : "transparent",
         cursor: onClick ? "pointer" : undefined,
       }}
       onMouseEnter={(e) => {

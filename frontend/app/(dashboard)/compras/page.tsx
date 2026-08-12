@@ -79,7 +79,7 @@ export default function ComprasPage() {
       )}
 
       {sugestoes.length > 0 && (
-        <div className="rounded-xl border p-4" style={{ background: "rgba(201,134,43,0.08)", borderColor: "var(--cor-acento)" }}>
+        <div className="rounded-xl border p-4" style={{ background: "rgba(16,185,129,0.08)", borderColor: "var(--cor-acento)" }}>
           <p className="text-xs font-semibold mb-1" style={{ color: "var(--cor-acento)" }}>Sugestão de reposição</p>
           {sugestoes.map((s) => (
             <p key={s.produto_id} className="text-sm">{s.produto_nome} — repor {s.quantidade_sugerida}</p>
@@ -120,7 +120,7 @@ export default function ComprasPage() {
           <div key={pedido.id} className="rounded-xl border p-4" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold uppercase" style={{ color: "var(--cor-texto-muted)" }}>Pedido {pedido.id.slice(0, 8)}</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-acento)", background: "rgba(201,134,43,0.14)" }}>{pedido.status}</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-acento)", background: "rgba(16,185,129,0.14)" }}>{pedido.status}</span>
             </div>
             {pedido.itens.map((item) => {
               const faltante = item.quantidade - item.quantidade_recebida;

@@ -1128,10 +1128,91 @@ existentes), mas não é mais o único mecanismo de proteção.
 `estoque-inteligente-scaffold.zip` (v16.1 — correção de prepared
 statement do pooler + correção da condição de corrida em saldo).
 
+## Etapa 17 — Responsividade mobile (shell + Estoque/Produtos/Vendas) + correção de cores legadas
+
+**Escopo:** tornar o shell do dashboard e as três telas já cobertas
+pelo kit de UX (Estoque, Produtos, Vendas) utilizáveis em telas de
+celular, sem regredir nenhuma funcionalidade existente no desktop.
+Protótipo interativo (mobile vs. desktop lado a lado) foi validado com
+Giliardi antes da implementação real. PWA (manifest, service worker,
+cache offline) permanece como fase separada, ainda não iniciada.
+
+**Correção de cores legadas (achada durante a inspeção pré-implementação,
+corrigida junto por decisão do Giliardi):**
+
+- `#221D18` (borda marrom da era pré-NexStock) hardcoded em 11 lugares,
+  incluindo `components/ui/Table.tsx` e `components/ui/Skeleton.tsx`
+  (inconsistente com a própria linha 15 do mesmo arquivo, que já usava
+  `var(--cor-borda)` corretamente) → padronizado para
+  `var(--cor-borda)` em todo o frontend.
+- `rgba(201,134,43,...)` / `rgba(196,140,60,...)` (laranja legado usado
+  em estados ativo/selecionado de chips, seletores de filtro e linha
+  selecionada da tabela) em 12 ocorrências, 8 arquivos — incluindo
+  telas que ainda não receberam o kit de UX (Movimentação, Notas,
+  Compras, Alertas). Corrigido para o verde `--cor-acento`
+  (`rgba(16,185,129,...)`, mesma opacidade original preservada por
+  ocorrência) em todo o frontend, não só nas telas desta etapa.
+
+**Shell (`app/(dashboard)/layout.tsx`):**
+
+- Sidebar fixa (`w-60`) mantida apenas em telas `md:` (≥768px) e
+  acima — antes não tinha nenhum tratamento para mobile.
+- Header sticky no mobile com botão hambúrguer (ícone `Menu`) abrindo
+  uma gaveta (drawer) lateral com a mesma navegação da sidebar; fecha
+  automaticamente ao trocar de rota, ao clicar fora (overlay
+  semi-transparente), ou pelo botão `X`.
+
+**Padrão aplicado em Estoque/Produtos/Vendas (`app/(dashboard)/{estoque,produtos,vendas}/page.tsx`):**
+
+- Cartões de KPI: `grid-cols-2` no mobile → `md:grid-cols-5` (Estoque)
+  ou `md:grid-cols-4` (Vendas); todos os KPIs originais preservados
+  (nenhum removido para "economizar espaço" — diferente do protótipo
+  inicial, que tinha cortado um KPI por simplicidade visual).
+- Ações rápidas (Estoque) e seletores/chips de filtro: rolagem
+  horizontal no mobile (`overflow-x-auto`) em vez de quebra de linha,
+  usando `md:contents` para que os mesmos elementos voltem a participar
+  do layout `flex-wrap` normal em telas `md:` sem duplicar JSX.
+- Busca: largura total no mobile, `md:w-72`/`md:w-64` no desktop
+  (mantido como antes).
+- **Tabela → lista de cards no mobile** (`hidden md:block` na tabela +
+  bloco `md:hidden` com cards): cada card preserva checkbox de seleção
+  múltipla, `RowMenu` com as mesmas ações da tabela, badge de
+  prioridade/status, e os campos secundários num grid interno de 2-3
+  colunas. `Pagination` reaproveitado sem alteração em ambos os modos.
+- `ProdutoForm`: grid interno de 2 colunas (SKU/Unidade,
+  Custo/Mínimo) vira 1 coluna abaixo do breakpoint `sm:` para não
+  apertar campos em telas muito estreitas.
+- Modais de detalhe (edição de produto, detalhe de venda): adicionado
+  `overflow-y-auto` + `max-h-full` no container, para não cortar
+  conteúdo em telas curtas (ex. celular em paisagem).
+
+**Verificação:**
+
+- `npx tsc --noEmit` limpo.
+- `next build` completo rodado com sucesso (14 rotas geradas, mesmo
+  contando as telas ainda não responsivas).
+- Suíte completa do backend rodada contra Postgres 16 local (mesmo
+  processo de sempre, roles restritos sem `BYPASSRLS`) para confirmar
+  ausência de regressão, já que a mudança desta etapa é 100% frontend:
+  **111/111 testes passando**, nenhuma alteração no backend.
+
+**Entregável:** `frontend/app/(dashboard)/layout.tsx`,
+`frontend/app/(dashboard)/estoque/page.tsx`,
+`frontend/app/(dashboard)/produtos/page.tsx`,
+`frontend/app/(dashboard)/vendas/page.tsx`,
+`frontend/components/produtos/ProdutoForm.tsx`,
+`frontend/components/ui/Table.tsx`, `frontend/components/ui/Skeleton.tsx`
+(+ demais arquivos tocados apenas pela correção de cor —
+`movimentacao/page.tsx`, `notas/page.tsx`, `compras/page.tsx`,
+`alertas/page.tsx`) + `estoque-inteligente-scaffold.zip` (v17).
+
 ### Próximos passos (backlog, sem mudança)
 
-- Replicar o kit de UX nas telas restantes: Notas Fiscais, Compras,
-  Inventário, Alertas.
+- Aplicar o mesmo padrão responsivo nas telas restantes do rollout:
+  Notas Fiscais, Compras, Inventário, Alertas (que ainda não têm o kit
+  de UX aplicado — vão nascer responsivas direto).
+- Fase PWA (manifest, service worker, cache offline) — separada do
+  trabalho de responsividade, ainda não iniciada.
 - Seletor de depósito em entrada/saída/ajuste na tela de Movimentação.
 - Retomar a reconciliação do mockup v4 de Estoque (ainda em aberto).
 - Aplicar identidade NexStock nos pontos ainda não cobertos: favicon,

@@ -54,7 +54,7 @@ export default function RelatoriosPage() {
               <tr><td colSpan={4} className="px-5 py-6 text-center" style={{ color: "var(--cor-texto-muted)" }}>Nenhum produto abaixo do mínimo no momento.</td></tr>
             )}
             {sugestoes.map((s) => (
-              <tr key={s.produto_id} style={{ borderTop: "1px solid #221D18" }}>
+              <tr key={s.produto_id} style={{ borderTop: "1px solid var(--cor-borda)" }}>
                 <td className="px-5 py-2.5">{s.produto_nome}</td>
                 <td className="px-3 py-2.5" style={{ color: "var(--cor-alerta)" }}>{s.saldo_atual}</td>
                 <td className="px-3 py-2.5" style={{ color: "var(--cor-texto-muted)" }}>{s.estoque_minimo}</td>
