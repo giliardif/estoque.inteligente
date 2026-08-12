@@ -1,15 +1,23 @@
 """
 Regra de negócio crítica: o saldo de um produto NUNCA pode ficar negativo.
 Toda saída/ajuste-negativo é validada contra o saldo atual (calculado a
-partir da soma de movimentações) DENTRO da mesma transação, com lock de
-linha (FOR UPDATE), para evitar condição de corrida — dois operadores
-lançando saída ao mesmo tempo não podem, juntos, zerar o estoque abaixo de 0.
+partir da soma de movimentações) DENTRO da mesma transação, para evitar
+condição de corrida — dois operadores lançando saída ao mesmo tempo não
+podem, juntos, zerar o estoque abaixo de 0.
+
+A serialização real é feita por `_travar_saldo_produto` (advisory lock por
+produto, ver docstring da função). O `.with_for_update()` dentro de
+calcular_saldo_atual/calcular_saldo_por_deposito continua presente como
+defesa em profundidade contra update/delete concorrente nas linhas já
+existentes, mas sozinho NÃO é suficiente — não protege contra phantom
+read de linhas novas inseridas por outra transação (bug real encontrado
+e corrigido, ver DEVLOG).
 """
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -29,6 +37,40 @@ DIAS_VENCIMENTO_PROXIMO = 5
 # nos últimos N dias corridos. Não existe essa noção em nenhum outro lugar
 # do sistema ainda — decisão tomada aqui, documentada no DEVLOG.
 DIAS_PRODUTO_NOVO = 7
+
+
+async def _travar_saldo_produto(db: AsyncSession, *, tenant_id: UUID, produto_id: UUID) -> None:
+    """
+    Serializa, por produto, o trecho "calcular saldo -> validar -> inserir
+    movimentação" contra qualquer outra transação concorrente fazendo a
+    mesma coisa para o MESMO produto.
+
+    BUG REAL encontrado e corrigido: o `.with_for_update()` em
+    calcular_saldo_atual/calcular_saldo_por_deposito trava as linhas de
+    Movimentacao JÁ EXISTENTES contra update/delete concorrente — mas não
+    protege contra leitura fantasma (phantom read): uma segunda transação
+    que estava bloqueada esperando o lock, ao ser liberada, só reavalia as
+    linhas que já tinha casado no scan inicial; uma linha NOVA inserida
+    pela primeira transação (ex.: a saída que acabou de ser gravada) não
+    entra nesse conjunto. Resultado: duas saídas concorrentes no mesmo
+    produto podiam, juntas, derrubar o saldo abaixo de zero — cada uma via
+    o saldo "antigo" (sem a saída da outra) e aprovava a validação.
+    Confirmado com um teste isolado (asyncpg puro, sem SQLAlchemy) antes de
+    aplicar esta correção.
+
+    `pg_advisory_xact_lock` resolve isso corretamente: é um lock lógico,
+    não preso a nenhuma linha específica, então cobre tanto updates quanto
+    inserts concorrentes que disputam o mesmo produto. Escopo por
+    tenant_id + produto_id (hashtext dos dois, forma de dois inteiros do
+    pg_advisory_xact_lock) evita que produtos de tenants diferentes
+    disputem o mesmo lock por coincidência de hash. Liberado automaticamente
+    no commit/rollback da transação — não precisa (nem deve) ser liberado
+    manualmente aqui.
+    """
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:tenant_id), hashtext(:produto_id))"),
+        {"tenant_id": str(tenant_id), "produto_id": str(produto_id)},
+    )
 
 
 async def calcular_saldo_atual(db: AsyncSession, *, tenant_id: UUID, produto_id: UUID) -> float:
@@ -99,6 +141,7 @@ async def registrar(
 
     # Para saída/ajuste-negativo: valida saldo suficiente ANTES de gravar
     if dados.tipo == "saida" or (dados.tipo == "ajuste" and quantidade_persistida < 0):
+        await _travar_saldo_produto(db, tenant_id=tenant_id, produto_id=dados.produto_id)
         saldo_atual = await calcular_saldo_atual(db, tenant_id=tenant_id, produto_id=dados.produto_id)
         delta = dados.quantidade if dados.tipo != "ajuste" else abs(quantidade_persistida)
         if saldo_atual - delta < 0:
@@ -157,6 +200,10 @@ async def _registrar_transferencia(
 
     # Validado contra o saldo DAQUELE depósito especificamente — não o total
     # do produto, que pode estar "de sobra" só porque outro depósito tem estoque.
+    # Trava por produto_id (não por depósito): duas transferências concorrentes do
+    # mesmo produto, ainda que de depósitos diferentes, disputam o mesmo saldo total
+    # do produto ao longo do tempo — mais simples e seguro serializar por produto inteiro.
+    await _travar_saldo_produto(db, tenant_id=tenant_id, produto_id=dados.produto_id)
     saldo_na_origem = await calcular_saldo_por_deposito(db, tenant_id=tenant_id, produto_id=dados.produto_id, deposito_id=origem_id)
     if saldo_na_origem - dados.quantidade < 0:
         raise HTTPException(

@@ -8,6 +8,7 @@ Estratégia de isolamento multi-tenant (defesa em profundidade):
   Isso garante que mesmo um bug de aplicação (ex.: esquecer o filtro tenant_id numa
   query) não vaza dados entre clientes — o banco barra no nível de linha.
 """
+import uuid
 from collections.abc import AsyncGenerator
 from uuid import UUID
 
@@ -19,12 +20,21 @@ from app.core.config import get_settings
 settings = get_settings()
 
 # NOTA (pooler Supabase / Supavisor, modo transaction - porta 6543):
-# esse modo não suporta prepared statements. O asyncpg usa prepared
-# statements por padrão via cache interno — sem desligar isso aqui,
-# toda query falha com erro de prepared statement inexistente assim
-# que o pgbouncer reciclar a conexão física entre transações.
-# `statement_cache_size=0` desliga esse cache no nível do asyncpg.
-_POOLER_CONNECT_ARGS = {"statement_cache_size": 0}
+# esse modo não suporta prepared statements nomeados persistentes. `statement_cache_size=0`
+# é um parâmetro NATIVO do asyncpg.connect() — mas o dialeto asyncpg do SQLAlchemy não
+# passa por esse caminho, ele chama connection.prepare() diretamente por baixo, então esse
+# valor era ignorado na prática (causa real do "prepared statement __asyncpg_stmt_X__ does
+# not exist" mesmo com essa opção presente). O parâmetro que o SQLAlchemy de fato respeita
+# é `prepared_statement_cache_size` (nível do dialeto). Combinamos com
+# `prepared_statement_name_func` gerando um nome único (UUID) por statement: mesmo que o
+# Supavisor troque a conexão física por trás no meio do caminho (ex.: após período ocioso +
+# pool_pre_ping), não há nome de statement fixo que possa ficar "orfão" de uma conexão
+# anterior nem colidir com o de outra sessão concorrente compartilhando o mesmo backend.
+_POOLER_CONNECT_ARGS = {
+    "statement_cache_size": 0,
+    "prepared_statement_cache_size": 0,
+    "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4()}__",
+}
 
 engine = create_async_engine(
     str(settings.DATABASE_URL),

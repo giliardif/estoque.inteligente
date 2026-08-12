@@ -1027,4 +1027,122 @@ corrigido).
   não resolvido — ver seção de aprendizados/pendências combinada com
   Giliardi.
 
+## Correção — Prepared statement do Supavisor (produção) + condição de corrida real em saldo
+
+**Contexto:** erro em produção (Railway/staging) ao cadastrar produto e ao
+listar o painel de Produtos:
+`asyncpg.exceptions.InvalidSQLStatementNameError: prepared statement
+"__asyncpg_stmt_X__" does not exist`, com padrão de X variando a cada
+ocorrência (`_b_`, `_d_`, `_10_`...).
+
+**Causa raiz real:** `statement_cache_size=0` já estava presente em
+`connect_args` desde a Etapa de setup do Supavisor — mas esse parâmetro é
+nativo do `asyncpg.connect()`, e o dialeto `asyncpg` do SQLAlchemy **não
+passa por esse caminho**: ele chama `connection.prepare()` diretamente,
+contornando esse cache por completo. Ou seja, a config existente nunca
+teve efeito real sobre o problema — resolvia o parâmetro certo pro driver
+errado. O parâmetro que o SQLAlchemy de fato respeita é
+`prepared_statement_cache_size` (nível do dialeto asyncpg do próprio
+SQLAlchemy), combinado com `prepared_statement_name_func` gerando um nome
+único (UUID) por prepare — assim nenhum nome de statement pode colidir ou
+ficar "órfão" de uma conexão física anterior quando o Supavisor recicla o
+backend por trás do pooler em modo transaction.
+
+**Verificação real do fix (não só leitura de código):** como esse bug só
+se manifesta atrás de um pooler em modo transaction (não em conexão
+direta), a suíte normal contra Postgres direto não seria suficiente para
+provar a correção. Foi instalado **pgbouncer local em modo `transaction`**
+(mesma semântica do Supavisor) para reproduzir e validar de verdade:
+
+1. Reproduzido o erro exato de produção localmente com a config antiga
+   (`statement_cache_size=0` apenas), via pgbouncer — confirmado que o
+   bug é 100% real e reprodutível fora do Railway.
+2. Com a config nova (`prepared_statement_cache_size=0` +
+   `prepared_statement_name_func` com UUID), rodadas de 300 execuções
+   concorrentes através do pgbouncer — 0 erros.
+3. Suíte completa (111 testes) rodada **através do pgbouncer** (topologia
+   igual à de produção: app → pooler modo transaction → Postgres) —
+   passou 100%.
+
+**Bug real adicional encontrado durante essa verificação (não relacionado
+ao pooler):** ao rodar a suíte pela primeira vez através do pgbouncer, o
+teste `test_duas_saidas_concorrentes_nao_zeram_estoque_abaixo_de_zero`
+falhou de forma determinística (5/5 execuções), embora sempre tivesse
+passado contra Postgres direto. Investigação isolou a causa: o
+`.with_for_update()` em `calcular_saldo_atual`/`calcular_saldo_por_deposito`
+trava as linhas de `Movimentacao` **já existentes** contra update/delete
+concorrente — mas não protege contra **leitura fantasma (phantom read)**:
+uma segunda transação que ficou bloqueada esperando o lock, ao ser
+liberada, só reavalia as linhas que já tinha casado no scan inicial; uma
+linha **nova** inserida pela primeira transação (a saída que ela acabou
+de gravar) não entra nesse conjunto. Resultado: duas saídas concorrentes
+no mesmo produto podiam, juntas, derrubar o saldo abaixo de zero — cada
+uma via o saldo "antigo" (sem a saída da outra) e aprovava a validação.
+Isso sempre existiu no código; só ficou visível de forma consistente ao
+testar através de um pooler, porque o timing mais realista da produção
+expõe a janela de corrida — em Postgres direto (round-trip muito rápido),
+as duas requisições raramente colidiam na janela exata.
+
+Confirmado isoladamente com um teste mínimo em asyncpg puro (sem
+SQLAlchemy) antes de aplicar qualquer correção, para eliminar a
+possibilidade de o problema estar em alguma camada do ORM.
+
+**Correção:** função `_travar_saldo_produto()` nova em
+`estoque/service.py`, usando `pg_advisory_xact_lock(hashtext(tenant_id),
+hashtext(produto_id))` — um lock lógico, não preso a nenhuma linha
+específica, que serializa corretamente tanto updates quanto inserts
+concorrentes disputando o saldo do mesmo produto. Liberado automaticamente
+no commit/rollback da transação. Chamado nos dois pontos de escrita reais
+que precisam dessa serialização: `registrar()` (saída/ajuste-negativo) e
+`_registrar_transferencia()` (saída na origem) — cobre também `Vendas`,
+já que `vendas.service.finalizar()` chama `estoque_service.registrar()`
+por item. O `.with_for_update()` original foi mantido como defesa em
+profundidade (ainda útil contra update/delete concorrente nas linhas
+existentes), mas não é mais o único mecanismo de proteção.
+
+**Verificação de segurança e testes:**
+
+- Ambiente de Postgres 16 real + **pgbouncer local em modo transaction**
+  (novo nesta correção, para validar de verdade o cenário de pooler).
+- Teste da condição de corrida (`test_duas_saidas_concorrentes_...`)
+  re-executado isoladamente 3x consecutivas via pgbouncer após a
+  correção — passou 3/3, determinístico.
+- Suíte completa (111 testes) via pgbouncer — **111/111 passando**,
+  reconfirmado em duas rodadas independentes.
+- Suíte completa via Postgres direto validada no início desta correção
+  (111/111) e, depois da correção, reconfirmada de forma segmentada por
+  arquivo (55/55 nos arquivos que tocam `estoque`, `transferencia`,
+  `vendas`, `compras`, `inventario` e `alertas` — os módulos que chamam
+  `calcular_saldo_atual`/`calcular_saldo_por_deposito` ou passam pelos
+  engines alterados). Rodadas adicionais da suíte completa via conexão
+  direta sofreram timeout por lentidão de I/O do próprio ambiente sandbox
+  (checkpoints de poucos KB levando 14–118s — degradação do ambiente,
+  não do código; Postgres permaneceu saudável e sem queries travadas em
+  `pg_stat_activity` durante os timeouts). A cobertura via pgbouncer
+  (que exercita literalmente todos os 111 testes, incluindo os módulos
+  acima) supre essa lacuna com folga.
+- **Bandit: 0 issues** (2974 linhas escaneadas em `app/`).
+
+**Entregável:** `backend/app/core/database.py`,
+`backend/app/modules/estoque/service.py` +
+`estoque-inteligente-scaffold.zip` (v16.1 — correção de prepared
+statement do pooler + correção da condição de corrida em saldo).
+
+### Próximos passos (backlog, sem mudança)
+
+- Replicar o kit de UX nas telas restantes: Notas Fiscais, Compras,
+  Inventário, Alertas.
+- Seletor de depósito em entrada/saída/ajuste na tela de Movimentação.
+- Retomar a reconciliação do mockup v4 de Estoque (ainda em aberto).
+- Aplicar identidade NexStock nos pontos ainda não cobertos: favicon,
+  metadata/título de aba do navegador, e-mails transacionais (quando
+  existirem).
+- Bug conhecido do `asyncpg`/`search_path` no Railway (staging), ainda
+  não resolvido.
+- Replicar em produção (quando o ambiente for configurado) a mesma
+  config de `prepared_statement_cache_size`/`prepared_statement_name_func`
+  — já está no `database.py` compartilhado, então não exige ação extra
+  além do deploy normal, mas vale confirmar no primeiro cadastro real de
+  produto em produção.
+
 
