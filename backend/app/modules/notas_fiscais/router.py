@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_for_tenant
 from app.core.security import CurrentUser, get_current_user, require_perfil
 from app.modules.notas_fiscais import service
-from app.modules.notas_fiscais.schemas import ConfirmarItemPayload, NotaFiscalItemOut, NotaFiscalResumoOut
+from app.modules.notas_fiscais.schemas import (
+    ConfirmarItemPayload,
+    NotaFiscalItemOut,
+    NotaFiscalResumoOut,
+    PainelNotasFiscaisOut,
+)
 
 router = APIRouter(prefix="/notas-fiscais", tags=["notas-fiscais"])
 
@@ -16,6 +21,26 @@ router = APIRouter(prefix="/notas-fiscais", tags=["notas-fiscais"])
 async def get_tenant_db(user: CurrentUser = Depends(get_current_user)) -> AsyncGenerator[AsyncSession, None]:
     async for session in get_db_for_tenant(user.tenant_id):
         yield session
+
+
+# IMPORTANTE: "/painel" precisa vir ANTES de qualquer rota parametrizada tipo
+# "/{nota_id}/itens" — mesma ordem usada em vendas/router.py e produtos/router.py.
+@router.get("/painel", response_model=PainelNotasFiscaisOut)
+async def painel_notas_fiscais(
+    status_filtro: str | None = Query(default=None, alias="status"),
+    fornecedor_id: UUID | None = Query(default=None),
+    busca: str | None = Query(default=None, max_length=200),
+    ordenar_por: str = Query(default="criado_em"),
+    direcao: str = Query(default="desc", pattern="^(asc|desc)$"),
+    pagina: int = Query(default=1, ge=1),
+    tamanho: int = Query(default=25, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    return await service.painel(
+        db, tenant_id=user.tenant_id, status_filtro=status_filtro, fornecedor_id=fornecedor_id, busca=busca,
+        ordenar_por=ordenar_por, direcao=direcao, pagina=pagina, tamanho=tamanho,
+    )
 
 
 @router.post("/importar", status_code=201)

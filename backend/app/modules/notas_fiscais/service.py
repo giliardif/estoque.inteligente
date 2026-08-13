@@ -9,7 +9,7 @@ confirmação humana, para evitar poluir o cadastro com erros de leitura do XML.
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Fornecedor, NotaFiscal, NotaFiscalItem, Produto
@@ -17,6 +17,12 @@ from app.modules.estoque import service as estoque_service
 from app.modules.estoque.schemas import MovimentacaoCreate
 from app.modules.notas_fiscais.parser_xml import parse_nfe_xml
 from app.modules.notas_fiscais.schemas import ConfirmarItemPayload
+
+ORDENAVEIS_PAINEL = {
+    "numero": NotaFiscal.numero,
+    "status": NotaFiscal.status,
+    "criado_em": NotaFiscal.criado_em,
+}
 
 
 async def _buscar_produto_correspondente(db: AsyncSession, *, tenant_id: UUID, codigo_ean: str | None, descricao: str):
@@ -167,3 +173,108 @@ async def listar(
         }
         for nota, fornecedor_nome, itens_pendentes in linhas
     ]
+
+
+async def painel(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    status_filtro: str | None = None,
+    fornecedor_id: UUID | None = None,
+    busca: str | None = None,
+    ordenar_por: str = "criado_em",
+    direcao: str = "desc",
+    pagina: int = 1,
+    tamanho: int = 25,
+) -> dict:
+    """
+    Alimenta a tela de Notas Fiscais com o kit de UX (busca, filtro de status,
+    ordenação de coluna, paginação real, KPIs). Mantido separado de `listar()`
+    (usado por GET /notas-fiscais "cru") — mesmo padrão já usado em
+    /estoque/painel, /produtos/painel e /vendas/painel.
+    """
+    pendentes_subq = (
+        select(func.count(NotaFiscalItem.id))
+        .where(NotaFiscalItem.nota_id == NotaFiscal.id, NotaFiscalItem.status_match == "pendente_cadastro")
+        .correlate(NotaFiscal)
+        .scalar_subquery()
+    )
+
+    stmt = (
+        select(NotaFiscal, Fornecedor.nome, pendentes_subq)
+        .outerjoin(Fornecedor, Fornecedor.id == NotaFiscal.fornecedor_id)
+        .where(NotaFiscal.tenant_id == tenant_id)
+    )
+    if status_filtro:
+        stmt = stmt.where(NotaFiscal.status == status_filtro)
+    if fornecedor_id:
+        stmt = stmt.where(NotaFiscal.fornecedor_id == fornecedor_id)
+    if busca:
+        termo = f"%{busca}%"
+        stmt = stmt.where(or_(NotaFiscal.numero.ilike(termo), Fornecedor.nome.ilike(termo)))
+
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+
+    coluna = ORDENAVEIS_PAINEL.get(ordenar_por, NotaFiscal.criado_em)
+    stmt = stmt.order_by(coluna.desc() if direcao == "desc" else coluna.asc())
+    stmt = stmt.offset((pagina - 1) * tamanho).limit(tamanho)
+
+    linhas = (await db.execute(stmt)).all()
+    itens = [
+        {
+            "id": nota.id,
+            "numero": nota.numero,
+            "status": nota.status,
+            "criado_em": nota.criado_em,
+            "fornecedor_nome": fornecedor_nome,
+            "itens_pendentes": itens_pendentes,
+        }
+        for nota, fornecedor_nome, itens_pendentes in linhas
+    ]
+
+    # KPIs sempre sobre o total do tenant, sem aplicar busca/status_filtro —
+    # mesmo princípio já usado nos paineis de Estoque/Produtos/Vendas.
+    total_notas = (
+        await db.execute(select(func.count()).select_from(NotaFiscal).where(NotaFiscal.tenant_id == tenant_id))
+    ).scalar_one()
+    itens_pendentes_confirmacao = (
+        await db.execute(
+            select(func.count())
+            .select_from(NotaFiscalItem)
+            .where(NotaFiscalItem.tenant_id == tenant_id, NotaFiscalItem.status_match == "pendente_cadastro")
+        )
+    ).scalar_one()
+    valor_total_importado = (
+        await db.execute(
+            select(func.coalesce(func.sum(NotaFiscalItem.quantidade * NotaFiscalItem.valor_unitario), 0)).where(
+                NotaFiscalItem.tenant_id == tenant_id, NotaFiscalItem.status_match != "ignorado"
+            )
+        )
+    ).scalar_one()
+    fornecedores_distintos = (
+        await db.execute(
+            select(func.count(func.distinct(NotaFiscal.fornecedor_id))).where(NotaFiscal.tenant_id == tenant_id)
+        )
+    ).scalar_one()
+
+    fornecedores = (
+        await db.execute(
+            select(Fornecedor.id, Fornecedor.nome)
+            .where(Fornecedor.tenant_id == tenant_id)
+            .order_by(Fornecedor.nome)
+        )
+    ).all()
+
+    return {
+        "kpis": {
+            "total_notas": total_notas,
+            "itens_pendentes_confirmacao": itens_pendentes_confirmacao,
+            "valor_total_importado": float(valor_total_importado),
+            "fornecedores_distintos": fornecedores_distintos,
+        },
+        "filtros": {"fornecedores": [{"id": i, "nome": n} for i, n in fornecedores]},
+        "itens": itens,
+        "total": total,
+        "pagina": pagina,
+        "tamanho": tamanho,
+    }

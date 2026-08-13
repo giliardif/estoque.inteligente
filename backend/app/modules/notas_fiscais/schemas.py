@@ -42,3 +42,35 @@ class ConfirmarItemPayload(BaseModel):
     # produto já existente OU indica que deve ser ignorado (não é estoque).
     produto_id: UUID | None = None
     ignorar: bool = False
+
+
+# --- Painel da tela de Notas Fiscais (Etapa 18) -----------------------------
+#
+# Endpoint dedicado (GET /notas-fiscais/painel), separado do GET /notas-fiscais
+# "cru" já existente — mesmo padrão usado em /estoque/painel, /produtos/painel
+# e /vendas/painel. KPIs sempre refletem o total do tenant, sem aplicar
+# busca/status (mesmo princípio já usado nas outras telas com kit de UX).
+
+class KpisNotasFiscaisOut(BaseModel):
+    total_notas: int
+    itens_pendentes_confirmacao: int
+    valor_total_importado: float
+    fornecedores_distintos: int
+
+
+class OpcaoFiltroFornecedor(BaseModel):
+    id: UUID
+    nome: str
+
+
+class FiltrosNotasFiscaisOut(BaseModel):
+    fornecedores: list[OpcaoFiltroFornecedor]
+
+
+class PainelNotasFiscaisOut(BaseModel):
+    kpis: KpisNotasFiscaisOut
+    filtros: FiltrosNotasFiscaisOut
+    itens: list[NotaFiscalResumoOut]
+    total: int
+    pagina: int
+    tamanho: int

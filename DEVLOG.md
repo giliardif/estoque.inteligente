@@ -1133,6 +1133,9 @@ statement do pooler + correção da condição de corrida em saldo).
 **Escopo:** tornar o shell do dashboard e as três telas já cobertas
 pelo kit de UX (Estoque, Produtos, Vendas) utilizáveis em telas de
 celular, sem regredir nenhuma funcionalidade existente no desktop.
+**Escopo:** tornar o shell do dashboard e as três telas já cobertas
+pelo kit de UX (Estoque, Produtos, Vendas) utilizáveis em telas de
+celular, sem regredir nenhuma funcionalidade existente no desktop.
 Protótipo interativo (mobile vs. desktop lado a lado) foi validado com
 Giliardi antes da implementação real. PWA (manifest, service worker,
 cache offline) permanece como fase separada, ainda não iniciada.
@@ -1227,3 +1230,73 @@ corrigida junto por decisão do Giliardi):**
   produto em produção.
 
 
+
+## Etapa 18 — Kit de UX + responsividade em Notas Fiscais
+
+**Escopo:** primeira das 5 telas restantes (Notas Fiscais, Compras,
+Inventário, Alertas, Movimentação) a receber o kit de UX. Diferente da
+Etapa 17, o padrão responsivo já estava validado e aprovado — aplicado
+direto, sem novo protótipo. Feita tela por tela (não em lote) para
+poder validar cada uma com testes reais antes de seguir pra próxima.
+
+**Backend — novo endpoint `GET /notas-fiscais/painel`:**
+
+- Mantido separado de `GET /notas-fiscais` (usado como listagem "crua"
+  por outras telas) — mesmo princípio de `/estoque/painel`,
+  `/produtos/painel`, `/vendas/painel`: mudar o contrato do endpoint
+  cru quebraria quem já depende dele.
+- KPIs (`total_notas`, `itens_pendentes_confirmacao`,
+  `valor_total_importado`, `fornecedores_distintos`) sempre calculados
+  sobre o total do tenant, sem aplicar busca/filtro — mesmo princípio
+  já usado em Estoque/Produtos/Vendas (KPI não reflete o filtro atual).
+- Filtros: status, `fornecedor_id`, busca por número da nota ou nome
+  do fornecedor (`ILIKE`), ordenação por número/status/data de
+  criação, paginação real (`total`/`pagina`/`tamanho`).
+- `itens_pendentes` por nota calculado via subquery correlacionada
+  (`NotaFiscalItem.status_match = 'pendente_cadastro'`), evitando N+1.
+- Schemas novos em `notas_fiscais/schemas.py`:
+  `KpisNotasFiscaisOut`, `FiltrosNotasFiscaisOut`,
+  `PainelNotasFiscaisOut`.
+- 7 testes novos em `tests/test_notas_fiscais_painel.py`: KPIs
+  refletindo importação recente, itens presentes na listagem,
+  isolamento entre tenants (RLS), filtro por status, busca por
+  número, paginação (`total` correto), lista de fornecedores nos
+  filtros.
+
+**Frontend (`app/(dashboard)/notas/page.tsx` — reescrita completa):**
+
+- KPIs em cartões (`grid-cols-2` mobile → `grid-cols-4` desktop),
+  destaque visual em verde `--cor-acento` quando há itens pendentes
+  de confirmação.
+- Busca com debounce (300ms), atalho `/` pra focar, chips de status
+  (Processada/Pendente/Cancelada) com rolagem horizontal no mobile,
+  seletor de fornecedor (populado pelo `filtros.fornecedores` do
+  próprio painel).
+- Tabela de notas importadas vira lista de cards no mobile
+  (`hidden md:block` / `md:hidden`), cada card com `RowMenu` (mesma
+  ação "Ver itens" da tabela desktop), badge de pendências e data.
+  Ordenação de coluna (`ThOrdenavel`), paginação real (`Pagination`),
+  skeleton de carregamento (`TableSkeletonRows`) — mesmo padrão do kit
+  usado em Estoque/Produtos/Vendas.
+- Bloco "Itens da nota selecionada" (upload de XML e itens
+  reconhecidos/pendentes/ignorados) mantido funcionalmente idêntico,
+  também com tratamento responsivo (cards no mobile).
+- Sem cores legadas nesse arquivo (já usava `var(--cor-borda)` e verde
+  `--cor-acento` corretamente antes desta etapa).
+
+**Verificação:**
+
+- Backend: suíte completa rodada contra Postgres 16 local, role
+  restrita (`NOBYPASSRLS`) — **118/118 passando** (111 anteriores + 7
+  novos).
+- Frontend: `npx tsc --noEmit` limpo, `next build` completo limpo (14
+  rotas, incluindo `/notas` com 4.13 kB / 111 kB First Load JS).
+
+**Entregável:** `backend/app/modules/notas_fiscais/{schemas.py,service.py,router.py}`,
+`backend/tests/test_notas_fiscais_painel.py`, `frontend/lib/types.ts`,
+`frontend/app/(dashboard)/notas/page.tsx` +
+`estoque-inteligente-scaffold.zip` (v18).
+
+**Estado do rollout:** kit de UX + responsividade aplicados em
+Estoque, Produtos, Vendas, **Notas Fiscais**. Restam Compras,
+Inventário, Alertas, Movimentação — seguem uma etapa por vez.

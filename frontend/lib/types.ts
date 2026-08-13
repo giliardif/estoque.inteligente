@@ -128,3 +128,32 @@ export type PainelVendas = {
   pagina: number;
   tamanho: number;
 };
+
+// --- Painel da tela de Notas Fiscais ----------------------------------------
+
+export type StatusNotaFiscal = "pendente" | "processada" | "cancelada";
+
+export type KpisNotasFiscais = {
+  total_notas: number;
+  itens_pendentes_confirmacao: number;
+  valor_total_importado: number;
+  fornecedores_distintos: number;
+};
+
+export type ItemNotaFiscalLista = {
+  id: string;
+  numero: string;
+  status: string;
+  criado_em: string;
+  fornecedor_nome: string | null;
+  itens_pendentes: number;
+};
+
+export type PainelNotasFiscais = {
+  itens: ItemNotaFiscalLista[];
+  kpis: KpisNotasFiscais;
+  filtros: { fornecedores: OpcaoFiltro[] };
+  total: number;
+  pagina: number;
+  tamanho: number;
+};
