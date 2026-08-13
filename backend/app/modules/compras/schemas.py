@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 
 class ItemPedidoInput(BaseModel):
@@ -44,3 +45,43 @@ class SugestaoReposicaoOut(BaseModel):
     saldo_atual: float
     estoque_minimo: float
     quantidade_sugerida: float
+
+
+# --- Painel da tela de Compras (Etapa 19) -----------------------------------
+#
+# GET /compras/painel, separado de GET /compras/pedidos (listagem crua já
+# usada) — mesmo padrão de /vendas/painel, /notas-fiscais/painel etc.
+
+class KpisComprasOut(BaseModel):
+    total_pedidos: int
+    pedidos_em_aberto: int
+    valor_total_pedidos: float
+    fornecedores_distintos: int
+
+
+class OpcaoFiltroFornecedorCompras(BaseModel):
+    id: UUID
+    nome: str
+
+
+class FiltrosComprasOut(BaseModel):
+    fornecedores: list[OpcaoFiltroFornecedorCompras]
+
+
+class PedidoListaItemOut(BaseModel):
+    id: UUID
+    status: str
+    fornecedor_nome: str | None
+    valor_total: float
+    qtd_itens: int
+    quantidade_pendente: float
+    criado_em: datetime
+
+
+class PainelComprasOut(BaseModel):
+    itens: list[PedidoListaItemOut]
+    kpis: KpisComprasOut
+    filtros: FiltrosComprasOut
+    total: int
+    pagina: int
+    tamanho: int

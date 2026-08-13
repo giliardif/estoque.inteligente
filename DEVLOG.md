@@ -1300,3 +1300,70 @@ poder validar cada uma com testes reais antes de seguir pra próxima.
 **Estado do rollout:** kit de UX + responsividade aplicados em
 Estoque, Produtos, Vendas, **Notas Fiscais**. Restam Compras,
 Inventário, Alertas, Movimentação — seguem uma etapa por vez.
+
+## Etapa 19 — Kit de UX + responsividade em Compras
+
+**Escopo:** segunda das telas restantes a receber o kit de UX. Mesmo
+método da Etapa 18: painel novo no backend + reescrita da tela, tela
+por tela, testes reais rodados antes de seguir.
+
+**Backend — novo endpoint `GET /compras/painel`:**
+
+- Mantido separado de `GET /compras/pedidos` (listagem crua) — mesmo
+  princípio dos demais paineis.
+- KPIs (`total_pedidos`, `pedidos_em_aberto`, `valor_total_pedidos`,
+  `fornecedores_distintos`) sempre sobre o total do tenant, sem
+  aplicar busca/filtro.
+- "Em aberto" = status `rascunho` ou `recebido_parcial`.
+- Cada linha do painel traz `valor_total`, `qtd_itens` e
+  `quantidade_pendente` do pedido via subqueries correlacionadas
+  contra `pedidos_compra_itens` — evita N+1 e mantém a agregação no
+  banco.
+- Filtros: status, `fornecedor_id`, busca por nome de fornecedor
+  (`ILIKE`), ordenação por status/data de criação, paginação real.
+- Schemas novos em `compras/schemas.py`: `KpisComprasOut`,
+  `FiltrosComprasOut`, `PedidoListaItemOut`, `PainelComprasOut`.
+- 7 testes novos em `tests/test_compras_painel.py`: KPIs refletindo
+  pedido criado, item presente na listagem, status/quantidade pendente
+  corretos após recebimento parcial, isolamento entre tenants (RLS),
+  filtro por status, paginação (`total` correto), `qtd_itens`/
+  `valor_total` corretos.
+
+**Frontend (`app/(dashboard)/compras/page.tsx` — reescrita completa):**
+
+- KPIs em cartões, destaque em verde quando há pedidos em aberto.
+- Busca com debounce, atalho `/`, chips de status (Rascunho/Recebido
+  parcial/Recebido/Cancelado), seletor de fornecedor.
+- Tabela de pedidos vira lista de cards no mobile (`hidden md:block` /
+  `md:hidden`), `RowMenu` com ação "Ver / receber", `ThOrdenavel`,
+  `Pagination`, `TableSkeletonRows` — mesmo padrão do kit.
+- Clicar num pedido (linha, card ou item do `RowMenu`) abre um painel
+  de detalhe com os itens do pedido e botão "Receber" por item — sai
+  do padrão *editar via modal* usado em Produtos porque recebimento é
+  uma ação incremental por item, não uma edição de registro único;
+  mantém a mesma UX que a tela já tinha antes do kit, só que agora
+  alimentado pelo endpoint de detalhe (`GET /compras/pedidos/{id}`)
+  chamado sob demanda em vez de pré-carregado.
+- Bloco de "Sugestão de reposição" e formulário de criação de pedido
+  (produto/quantidade/custo) mantidos funcionalmente idênticos, com
+  ajustes de layout para largura total no mobile.
+- Sem cores legadas nesse arquivo (já usava tokens corretos).
+
+**Verificação:**
+
+- Backend: suíte completa rodada contra Postgres 16 local, role
+  restrita — **125/125 passando** (118 anteriores + 7 novos). Cluster
+  Postgres tinha caído entre sessões (dados intactos, só o processo
+  não estava rodando) — identificado com `pg_lsclusters` e resolvido
+  com `pg_ctlcluster 16 main start` antes de rodar os testes.
+- Frontend: `npx tsc --noEmit` limpo, `next build` completo limpo (14
+  rotas, `/compras` com 4.01 kB / 111 kB First Load JS).
+
+**Entregável:** `backend/app/modules/compras/{schemas.py,service.py,router.py}`,
+`backend/tests/test_compras_painel.py`, `frontend/lib/types.ts`,
+`frontend/app/(dashboard)/compras/page.tsx` +
+`estoque-inteligente-scaffold.zip` (v19).
+
+**Estado do rollout:** kit de UX + responsividade aplicados em
+Estoque, Produtos, Vendas, Notas Fiscais, **Compras**. Restam
+Inventário, Alertas, Movimentação.

@@ -2,13 +2,14 @@ from collections.abc import AsyncGenerator
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_for_tenant
 from app.core.security import CurrentUser, get_current_user, require_perfil
 from app.modules.compras import service
 from app.modules.compras.schemas import (
+    PainelComprasOut,
     PedidoCompraCreate,
     PedidoCompraOut,
     ReceberItemInput,
@@ -21,6 +22,24 @@ router = APIRouter(prefix="/compras", tags=["compras"])
 async def get_tenant_db(user: CurrentUser = Depends(get_current_user)) -> AsyncGenerator[AsyncSession, None]:
     async for session in get_db_for_tenant(user.tenant_id):
         yield session
+
+
+@router.get("/painel", response_model=PainelComprasOut)
+async def painel_compras(
+    status_filtro: str | None = Query(default=None, alias="status"),
+    fornecedor_id: UUID | None = Query(default=None),
+    busca: str | None = Query(default=None, max_length=200),
+    ordenar_por: str = Query(default="criado_em"),
+    direcao: str = Query(default="desc", pattern="^(asc|desc)$"),
+    pagina: int = Query(default=1, ge=1),
+    tamanho: int = Query(default=25, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    return await service.painel(
+        db, tenant_id=user.tenant_id, status_filtro=status_filtro, fornecedor_id=fornecedor_id, busca=busca,
+        ordenar_por=ordenar_por, direcao=direcao, pagina=pagina, tamanho=tamanho,
+    )
 
 
 @router.post("/pedidos", response_model=PedidoCompraOut, status_code=201)

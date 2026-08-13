@@ -11,14 +11,20 @@ sazonalidade), mas a versão atual já é útil e 100% explicável ao usuário.
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import PedidoCompra, PedidoCompraItem, Produto
+from app.db.models import Fornecedor, PedidoCompra, PedidoCompraItem, Produto
 from app.modules.compras.schemas import PedidoCompraCreate, ReceberItemInput
 from app.modules.estoque import service as estoque_service
 from app.modules.estoque.schemas import MovimentacaoCreate
+
+ORDENAVEIS_PAINEL = {
+    "status": PedidoCompra.status,
+    "criado_em": PedidoCompra.criado_em,
+}
+PEDIDOS_EM_ABERTO = ("rascunho", "recebido_parcial")
 
 
 async def criar_pedido(db: AsyncSession, *, tenant_id: UUID, usuario_id: UUID, dados: PedidoCompraCreate) -> PedidoCompra:
@@ -115,6 +121,121 @@ async def receber_item(
     await db.commit()
     await db.refresh(item)
     return item
+
+
+async def painel(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    status_filtro: str | None = None,
+    fornecedor_id: UUID | None = None,
+    busca: str | None = None,
+    ordenar_por: str = "criado_em",
+    direcao: str = "desc",
+    pagina: int = 1,
+    tamanho: int = 25,
+) -> dict:
+    """
+    Alimenta a tela de Compras com o kit de UX. Mantido separado de
+    listar()/GET /compras/pedidos (usado como listagem crua) — mesmo padrão
+    já usado em /estoque/painel, /produtos/painel, /vendas/painel e
+    /notas-fiscais/painel.
+    """
+    valor_total_subq = (
+        select(func.coalesce(func.sum(PedidoCompraItem.quantidade * PedidoCompraItem.custo_unitario), 0))
+        .where(PedidoCompraItem.pedido_id == PedidoCompra.id)
+        .correlate(PedidoCompra)
+        .scalar_subquery()
+    )
+    qtd_itens_subq = (
+        select(func.count(PedidoCompraItem.id))
+        .where(PedidoCompraItem.pedido_id == PedidoCompra.id)
+        .correlate(PedidoCompra)
+        .scalar_subquery()
+    )
+    pendente_subq = (
+        select(func.coalesce(func.sum(PedidoCompraItem.quantidade - PedidoCompraItem.quantidade_recebida), 0))
+        .where(PedidoCompraItem.pedido_id == PedidoCompra.id)
+        .correlate(PedidoCompra)
+        .scalar_subquery()
+    )
+
+    stmt = (
+        select(PedidoCompra, Fornecedor.nome, valor_total_subq, qtd_itens_subq, pendente_subq)
+        .outerjoin(Fornecedor, Fornecedor.id == PedidoCompra.fornecedor_id)
+        .where(PedidoCompra.tenant_id == tenant_id)
+    )
+    if status_filtro:
+        stmt = stmt.where(PedidoCompra.status == status_filtro)
+    if fornecedor_id:
+        stmt = stmt.where(PedidoCompra.fornecedor_id == fornecedor_id)
+    if busca:
+        stmt = stmt.where(Fornecedor.nome.ilike(f"%{busca}%"))
+
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+
+    coluna = ORDENAVEIS_PAINEL.get(ordenar_por, PedidoCompra.criado_em)
+    stmt = stmt.order_by(coluna.desc() if direcao == "desc" else coluna.asc())
+    stmt = stmt.offset((pagina - 1) * tamanho).limit(tamanho)
+
+    linhas = (await db.execute(stmt)).all()
+    itens = [
+        {
+            "id": pedido.id,
+            "status": pedido.status,
+            "fornecedor_nome": fornecedor_nome,
+            "valor_total": float(valor_total),
+            "qtd_itens": qtd_itens,
+            "quantidade_pendente": float(pendente),
+            "criado_em": pedido.criado_em,
+        }
+        for pedido, fornecedor_nome, valor_total, qtd_itens, pendente in linhas
+    ]
+
+    # KPIs sempre sobre o total do tenant, sem aplicar busca/status_filtro —
+    # mesmo princípio já usado nos demais paineis com kit de UX.
+    total_pedidos = (
+        await db.execute(select(func.count()).select_from(PedidoCompra).where(PedidoCompra.tenant_id == tenant_id))
+    ).scalar_one()
+    pedidos_em_aberto = (
+        await db.execute(
+            select(func.count())
+            .select_from(PedidoCompra)
+            .where(PedidoCompra.tenant_id == tenant_id, PedidoCompra.status.in_(PEDIDOS_EM_ABERTO))
+        )
+    ).scalar_one()
+    valor_total_pedidos = (
+        await db.execute(
+            select(func.coalesce(func.sum(PedidoCompraItem.quantidade * PedidoCompraItem.custo_unitario), 0)).where(
+                PedidoCompraItem.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one()
+    fornecedores_distintos = (
+        await db.execute(
+            select(func.count(func.distinct(PedidoCompra.fornecedor_id))).where(PedidoCompra.tenant_id == tenant_id)
+        )
+    ).scalar_one()
+
+    fornecedores = (
+        await db.execute(
+            select(Fornecedor.id, Fornecedor.nome).where(Fornecedor.tenant_id == tenant_id).order_by(Fornecedor.nome)
+        )
+    ).all()
+
+    return {
+        "kpis": {
+            "total_pedidos": total_pedidos,
+            "pedidos_em_aberto": pedidos_em_aberto,
+            "valor_total_pedidos": float(valor_total_pedidos),
+            "fornecedores_distintos": fornecedores_distintos,
+        },
+        "filtros": {"fornecedores": [{"id": i, "nome": n} for i, n in fornecedores]},
+        "itens": itens,
+        "total": total,
+        "pagina": pagina,
+        "tamanho": tamanho,
+    }
 
 
 async def sugestao_reposicao(db: AsyncSession, *, tenant_id: UUID) -> list[dict]:

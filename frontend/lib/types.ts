@@ -157,3 +157,31 @@ export type PainelNotasFiscais = {
   pagina: number;
   tamanho: number;
 };
+
+// --- Painel da tela de Compras ----------------------------------------------
+
+export type KpisCompras = {
+  total_pedidos: number;
+  pedidos_em_aberto: number;
+  valor_total_pedidos: number;
+  fornecedores_distintos: number;
+};
+
+export type PedidoListaItem = {
+  id: string;
+  status: string;
+  fornecedor_nome: string | null;
+  valor_total: number;
+  qtd_itens: number;
+  quantidade_pendente: number;
+  criado_em: string;
+};
+
+export type PainelCompras = {
+  itens: PedidoListaItem[];
+  kpis: KpisCompras;
+  filtros: { fornecedores: OpcaoFiltro[] };
+  total: number;
+  pagina: number;
+  tamanho: number;
+};
