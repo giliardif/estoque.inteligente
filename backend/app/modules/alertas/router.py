@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_for_tenant
 from app.core.security import CurrentUser, get_current_user, require_perfil
 from app.modules.alertas import service
-from app.modules.alertas.schemas import AlertaOut, RegraAlertaCreate, RegraAlertaOut, RegraAlertaUpdate
+from app.modules.alertas.schemas import AlertaOut, PainelAlertasOut, RegraAlertaCreate, RegraAlertaOut, RegraAlertaUpdate
 
 router = APIRouter(prefix="/alertas", tags=["alertas"])
 
@@ -16,6 +16,24 @@ router = APIRouter(prefix="/alertas", tags=["alertas"])
 async def get_tenant_db(user: CurrentUser = Depends(get_current_user)) -> AsyncGenerator[AsyncSession, None]:
     async for session in get_db_for_tenant(user.tenant_id):
         yield session
+
+
+# IMPORTANTE: "/painel" precisa vir ANTES de "/{alerta_id}/marcar-lido",
+# mesma ordem usada nos demais routers com painel.
+@router.get("/painel", response_model=PainelAlertasOut)
+async def painel_alertas(
+    tipo_filtro: str | None = Query(default=None, alias="tipo"),
+    status_filtro: str | None = Query(default=None, alias="status", pattern="^(lido|nao_lido)$"),
+    busca: str | None = Query(default=None, max_length=200),
+    pagina: int = Query(default=1, ge=1),
+    tamanho: int = Query(default=25, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    return await service.painel(
+        db, tenant_id=user.tenant_id, tipo_filtro=tipo_filtro, status_filtro=status_filtro, busca=busca,
+        pagina=pagina, tamanho=tamanho,
+    )
 
 
 @router.post("/regras", response_model=RegraAlertaOut, status_code=201)

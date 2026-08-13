@@ -45,3 +45,33 @@ class AlertaOut(BaseModel):
     criado_em: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- Painel da tela de Alertas (Etapa 21) -----------------------------------
+#
+# GET /alertas/painel, separado de GET /alertas (listagem crua já usada) —
+# mesmo padrão de /estoque/painel, /inventario/painel etc.
+
+class KpisAlertasOut(BaseModel):
+    total_ativos: int
+    validade: int
+    estoque_baixo: int
+    produto_parado: int
+
+
+class AlertaListaItemOut(BaseModel):
+    id: UUID
+    tipo: str
+    produto_id: UUID
+    produto_nome: str | None
+    mensagem: str
+    lido: bool
+    criado_em: datetime
+
+
+class PainelAlertasOut(BaseModel):
+    itens: list[AlertaListaItemOut]
+    kpis: KpisAlertasOut
+    total: int
+    pagina: int
+    tamanho: int

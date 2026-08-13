@@ -9,12 +9,14 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AlertaGerado, Lote, Movimentacao, Produto, RegraAlerta
 from app.modules.estoque import service as estoque_service
 from app.modules.alertas.schemas import RegraAlertaCreate, RegraAlertaUpdate
+
+TIPOS_ALERTA = ("validade", "estoque_baixo", "produto_parado")
 
 DEFAULTS = {
     "validade": {"dias_antes": 5},
@@ -176,3 +178,77 @@ async def marcar_lido(db: AsyncSession, *, tenant_id: UUID, alerta_id: UUID) -> 
     await db.commit()
     await db.refresh(alerta)
     return alerta
+
+
+async def painel(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    tipo_filtro: str | None = None,
+    status_filtro: str | None = None,  # "lido" | "nao_lido" | None (todos)
+    busca: str | None = None,
+    pagina: int = 1,
+    tamanho: int = 25,
+) -> dict:
+    """
+    Alimenta a tela de Alertas com o kit de UX. Mantido separado de
+    listar_alertas()/GET /alertas (usado como listagem crua) — mesmo padrão
+    já usado em /estoque/painel, /inventario/painel etc.
+    """
+    stmt = (
+        select(AlertaGerado, Produto.nome)
+        .outerjoin(Produto, Produto.id == AlertaGerado.produto_id)
+        .where(AlertaGerado.tenant_id == tenant_id)
+    )
+    if tipo_filtro:
+        stmt = stmt.where(AlertaGerado.tipo == tipo_filtro)
+    if status_filtro == "lido":
+        stmt = stmt.where(AlertaGerado.lido.is_(True))
+    elif status_filtro == "nao_lido":
+        stmt = stmt.where(AlertaGerado.lido.is_(False))
+    if busca:
+        termo = f"%{busca}%"
+        stmt = stmt.where(or_(AlertaGerado.mensagem.ilike(termo), Produto.nome.ilike(termo)))
+
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+
+    stmt = stmt.order_by(AlertaGerado.criado_em.desc())
+    stmt = stmt.offset((pagina - 1) * tamanho).limit(tamanho)
+
+    linhas = (await db.execute(stmt)).all()
+    itens = [
+        {
+            "id": alerta.id,
+            "tipo": alerta.tipo,
+            "produto_id": alerta.produto_id,
+            "produto_nome": produto_nome,
+            "mensagem": alerta.mensagem,
+            "lido": alerta.lido,
+            "criado_em": alerta.criado_em,
+        }
+        for alerta, produto_nome in linhas
+    ]
+
+    # KPIs sempre sobre os alertas ATIVOS (não lidos) do tenant, sem aplicar
+    # busca/filtro — mesmo princípio já usado nos demais paineis (embora aqui
+    # o "universo" seja não-lidos, não o total geral, já que alerta lido é
+    # considerado resolvido/arquivado).
+    contagens = dict(
+        (
+            await db.execute(
+                select(AlertaGerado.tipo, func.count())
+                .where(AlertaGerado.tenant_id == tenant_id, AlertaGerado.lido.is_(False))
+                .group_by(AlertaGerado.tipo)
+            )
+        ).all()
+    )
+    kpis = {tipo: contagens.get(tipo, 0) for tipo in TIPOS_ALERTA}
+    kpis["total_ativos"] = sum(kpis.values())
+
+    return {
+        "kpis": kpis,
+        "itens": itens,
+        "total": total,
+        "pagina": pagina,
+        "tamanho": tamanho,
+    }

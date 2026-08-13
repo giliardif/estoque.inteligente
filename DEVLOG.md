@@ -1438,3 +1438,70 @@ método das Etapas 18 e 19.
 **Estado do rollout:** kit de UX + responsividade aplicados em
 Estoque, Produtos, Vendas, Notas Fiscais, Compras, **Inventário**.
 Restam Alertas, Movimentação.
+
+## Etapa 21 — Kit de UX + responsividade em Alertas
+
+**Escopo:** quarta das telas restantes a receber o kit de UX. Mesmo
+método das etapas anteriores.
+
+**Backend — novo endpoint `GET /alertas/painel`:**
+
+- Mantido separado de `GET /alertas` (listagem crua) — mesmo
+  princípio dos demais paineis.
+- KPIs (`total_ativos`, `validade`, `estoque_baixo`, `produto_parado`)
+  contam apenas alertas **não lidos** — diferente dos outros paineis,
+  aqui o "universo" natural do KPI não é o total histórico, e sim os
+  alertas ativos, já que um alerta lido é considerado resolvido/
+  arquivado. Documentado explicitamente no código pra não virar
+  inconsistência futura por engano.
+- Filtros: `tipo` (validade/estoque_baixo/produto_parado), `status`
+  (lido/nao_lido), busca por mensagem ou nome do produto (`ILIKE`
+  nos dois via `OR`), paginação real. Sem ordenação de coluna — a
+  lista já é naturalmente ordenada por mais recente primeiro, mesmo
+  comportamento da tela anterior.
+- Schemas novos em `alertas/schemas.py`: `KpisAlertasOut`,
+  `AlertaListaItemOut`, `PainelAlertasOut`.
+- 7 testes novos em `tests/test_alertas_painel.py`: KPIs refletindo
+  alerta gerado pelo motor, item com nome do produto, KPI não conta
+  alerta já lido, filtro por status lido/não lido, filtro por tipo,
+  busca por nome de produto, isolamento entre tenants (RLS). Um teste
+  inicial tinha um bug de asserção — produto sem movimentação E sem
+  saldo dispara `estoque_baixo` **e** `produto_parado` ao mesmo tempo,
+  então pegar "o primeiro alerta daquele produto" sem filtrar por tipo
+  dava resultado não-determinístico; corrigido filtrando por tipo
+  explicitamente antes de rodar a suíte completa.
+
+**Frontend (`app/(dashboard)/alertas/page.tsx` — reescrita completa):**
+
+- KPIs em cartões (Ativos/Validade/Estoque baixo/Produto parado),
+  destaque em verde quando há alertas ativos.
+- Painel de "Regras configuradas" (ativar/desativar, editar parâmetro
+  de dias) mantido funcionalmente idêntico — é configuração, não uma
+  listagem, mesmo raciocínio já aplicado ao formulário de Compras e
+  ao fluxo de contagem de Inventário; só ganhou layout responsivo
+  (linha vira coluna no mobile).
+- Lista de alertas agora usa o kit completo: busca, chips de status
+  (Ativos/Lidos) e de tipo, paginação real, tabela → cards no mobile.
+  Botão "marcar como lido" some da linha assim que o alerta é
+  marcado (recarrega o painel), mantendo o comportamento anterior de
+  "sumir da lista" mesmo agora que a lista é paginada/filtrada de
+  verdade.
+- Sem cores legadas nesse arquivo.
+
+**Verificação:**
+
+- Backend: suíte completa rodada contra Postgres 16 local, role
+  restrita — **139/139 passando** (132 anteriores + 7 novos, após
+  corrigir o bug de asserção descrito acima). Cluster Postgres caiu
+  de novo entre sessões — mesmo procedimento de sempre pra resolver.
+- Frontend: `npx tsc --noEmit` limpo, `next build` completo limpo (14
+  rotas, `/alertas` com 3.52 kB / 111 kB First Load JS).
+
+**Entregável:** `backend/app/modules/alertas/{schemas.py,service.py,router.py}`,
+`backend/tests/test_alertas_painel.py`, `frontend/lib/types.ts`,
+`frontend/app/(dashboard)/alertas/page.tsx` +
+`estoque-inteligente-scaffold.zip` (v21).
+
+**Estado do rollout:** kit de UX + responsividade aplicados em
+Estoque, Produtos, Vendas, Notas Fiscais, Compras, Inventário,
+**Alertas**. Resta apenas Movimentação.

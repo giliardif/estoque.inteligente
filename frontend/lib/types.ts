@@ -214,3 +214,30 @@ export type PainelInventario = {
   pagina: number;
   tamanho: number;
 };
+
+// --- Painel da tela de Alertas ----------------------------------------------
+
+export type KpisAlertas = {
+  total_ativos: number;
+  validade: number;
+  estoque_baixo: number;
+  produto_parado: number;
+};
+
+export type AlertaListaItem = {
+  id: string;
+  tipo: string;
+  produto_id: string;
+  produto_nome: string | null;
+  mensagem: string;
+  lido: boolean;
+  criado_em: string;
+};
+
+export type PainelAlertas = {
+  itens: AlertaListaItem[];
+  kpis: KpisAlertas;
+  total: number;
+  pagina: number;
+  tamanho: number;
+};
