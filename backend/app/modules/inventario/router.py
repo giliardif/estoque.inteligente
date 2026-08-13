@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_for_tenant
 from app.core.security import CurrentUser, get_current_user, require_perfil
 from app.modules.inventario import service
-from app.modules.inventario.schemas import InventarioAbrir, InventarioFechar, InventarioItemOut, InventarioOut
+from app.modules.inventario.schemas import (
+    InventarioAbrir,
+    InventarioFechar,
+    InventarioItemOut,
+    InventarioOut,
+    PainelInventarioOut,
+)
 
 router = APIRouter(prefix="/inventario", tags=["inventario"])
 
@@ -16,6 +22,26 @@ router = APIRouter(prefix="/inventario", tags=["inventario"])
 async def get_tenant_db(user: CurrentUser = Depends(get_current_user)) -> AsyncGenerator[AsyncSession, None]:
     async for session in get_db_for_tenant(user.tenant_id):
         yield session
+
+
+# IMPORTANTE: "/painel" precisa vir ANTES de "/aberto" e "/{inventario_id}/...",
+# mesma ordem usada nos demais routers com painel.
+@router.get("/painel", response_model=PainelInventarioOut)
+async def painel_inventario(
+    status_filtro: str | None = Query(default=None, alias="status"),
+    deposito_id: UUID | None = Query(default=None),
+    busca: str | None = Query(default=None, max_length=20),
+    ordenar_por: str = Query(default="criado_em"),
+    direcao: str = Query(default="desc", pattern="^(asc|desc)$"),
+    pagina: int = Query(default=1, ge=1),
+    tamanho: int = Query(default=25, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    return await service.painel(
+        db, tenant_id=user.tenant_id, status_filtro=status_filtro, deposito_id=deposito_id, busca=busca,
+        ordenar_por=ordenar_por, direcao=direcao, pagina=pagina, tamanho=tamanho,
+    )
 
 
 @router.post("", response_model=InventarioOut, status_code=201)

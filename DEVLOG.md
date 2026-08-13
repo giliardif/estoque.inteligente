@@ -1367,3 +1367,74 @@ por tela, testes reais rodados antes de seguir.
 **Estado do rollout:** kit de UX + responsividade aplicados em
 Estoque, Produtos, Vendas, Notas Fiscais, **Compras**. Restam
 Inventário, Alertas, Movimentação.
+
+## Etapa 20 — Kit de UX + responsividade em Inventário
+
+**Escopo:** terceira das telas restantes a receber o kit de UX. Mesmo
+método das Etapas 18 e 19.
+
+**Backend — novo endpoint `GET /inventario/painel`:**
+
+- Mantido separado de `GET /inventario` (listagem crua, ainda usada
+  pelo fluxo de retomar contagem em aberto) — mesmo princípio dos
+  demais paineis.
+- **Atenção ao gap já registrado no backlog:** `InventarioItem` não
+  tem `tenant_id` próprio. Todas as agregações do painel (KPI
+  `itens_divergentes`, e `qtd_itens_contados`/`qtd_divergentes` por
+  linha) filtram tenant via join/correlação com `Inventario.tenant_id`
+  — nunca por uma coluna `tenant_id` direta em `InventarioItem`, que
+  não existe. Não mexi na estrutura da tabela nesta etapa (fora de
+  escopo, backlog não bloqueante); só documentei o cuidado no código.
+- KPIs (`total_inventarios`, `inventarios_abertos`,
+  `itens_divergentes`, `depositos_distintos`) sempre sobre o total do
+  tenant, sem aplicar busca/filtro.
+- Cada linha traz `qtd_itens_contados` e `qtd_divergentes` via
+  subqueries correlacionadas contra `inventario_itens`.
+- Filtros: status, `deposito_id`, busca por ciclo (`ILIKE`),
+  ordenação por ciclo/status/data de criação, paginação real.
+- Schemas novos em `inventario/schemas.py`: `KpisInventarioOut`,
+  `FiltrosInventarioOut`, `InventarioListaItemOut`,
+  `PainelInventarioOut`.
+- 7 testes novos em `tests/test_inventario_painel.py`: KPIs refletindo
+  abertura, `qtd_divergentes` correta após fechamento com e sem
+  divergência, isolamento entre tenants (RLS), filtro por status,
+  busca por ciclo, paginação (`total` correto). Um dos testes de
+  paginação precisou fechar cada inventário antes de abrir o próximo
+  — a regra de negócio só permite um inventário aberto por depósito
+  por vez, então três `POST /inventario` em sequência sem fechar
+  teria caído no 409 já existente.
+
+**Frontend (`app/(dashboard)/inventario/page.tsx` — reescrita completa):**
+
+- KPIs em cartões, destaque em verde quando há ciclos em aberto.
+- Fluxo de abrir/contar/fechar ciclo mantido funcionalmente idêntico
+  (é uma ação de estado único, não uma listagem — mesmo raciocínio já
+  aplicado ao formulário de criar pedido em Compras), só com a tabela
+  de contagem ganhando tratamento responsivo (linha vira layout
+  produto+input compacto no mobile).
+- A antiga seção estática "Inventários anteriores" foi substituída
+  pelo painel completo do kit: busca por ciclo, chips de status
+  (Aberto/Fechado), seletor de depósito, ordenação de coluna,
+  paginação real, tabela → cards no mobile, badge de divergência (em
+  vermelho `--cor-alerta` quando há itens divergentes, verde quando a
+  contagem bateu).
+- Sem cores legadas nesse arquivo.
+
+**Verificação:**
+
+- Backend: suíte completa rodada contra Postgres 16 local, role
+  restrita — **132/132 passando** (125 anteriores + 7 novos). Cluster
+  Postgres caiu de novo entre sessões (mesmo comportamento da Etapa
+  19) — resolvido do mesmo jeito, `pg_ctlcluster 16 main start` antes
+  de rodar os testes.
+- Frontend: `npx tsc --noEmit` limpo, `next build` completo limpo (14
+  rotas, `/inventario` com 3.55 kB / 111 kB First Load JS).
+
+**Entregável:** `backend/app/modules/inventario/{schemas.py,service.py,router.py}`,
+`backend/tests/test_inventario_painel.py`, `frontend/lib/types.ts`,
+`frontend/app/(dashboard)/inventario/page.tsx` +
+`estoque-inteligente-scaffold.zip` (v20).
+
+**Estado do rollout:** kit de UX + responsividade aplicados em
+Estoque, Produtos, Vendas, Notas Fiscais, Compras, **Inventário**.
+Restam Alertas, Movimentação.

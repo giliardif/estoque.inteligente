@@ -185,3 +185,32 @@ export type PainelCompras = {
   pagina: number;
   tamanho: number;
 };
+
+// --- Painel da tela de Inventário -------------------------------------------
+
+export type KpisInventario = {
+  total_inventarios: number;
+  inventarios_abertos: number;
+  itens_divergentes: number;
+  depositos_distintos: number;
+};
+
+export type InventarioListaItem = {
+  id: string;
+  status: string;
+  ciclo: string;
+  deposito_id: string | null;
+  deposito_nome: string | null;
+  qtd_itens_contados: number;
+  qtd_divergentes: number;
+  criado_em: string;
+};
+
+export type PainelInventario = {
+  itens: InventarioListaItem[];
+  kpis: KpisInventario;
+  filtros: { depositos: OpcaoFiltro[] };
+  total: number;
+  pagina: number;
+  tamanho: number;
+};

@@ -35,3 +35,46 @@ class InventarioOut(BaseModel):
     criado_em: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- Painel da tela de Inventário (Etapa 20) --------------------------------
+#
+# GET /inventario/painel, separado de GET /inventario (listagem crua) —
+# mesmo padrão de /estoque/painel, /compras/painel etc. Atenção: InventarioItem
+# não tem tenant_id próprio (gap conhecido registrado no backlog) — o filtro
+# de tenant é sempre feito via join com Inventario.tenant_id, nunca direto.
+
+class KpisInventarioOut(BaseModel):
+    total_inventarios: int
+    inventarios_abertos: int
+    itens_divergentes: int
+    depositos_distintos: int
+
+
+class OpcaoFiltroDeposito(BaseModel):
+    id: UUID
+    nome: str
+
+
+class FiltrosInventarioOut(BaseModel):
+    depositos: list[OpcaoFiltroDeposito]
+
+
+class InventarioListaItemOut(BaseModel):
+    id: UUID
+    status: str
+    ciclo: str
+    deposito_id: UUID | None
+    deposito_nome: str | None
+    qtd_itens_contados: int
+    qtd_divergentes: int
+    criado_em: datetime
+
+
+class PainelInventarioOut(BaseModel):
+    itens: list[InventarioListaItemOut]
+    kpis: KpisInventarioOut
+    filtros: FiltrosInventarioOut
+    total: int
+    pagina: int
+    tamanho: int
