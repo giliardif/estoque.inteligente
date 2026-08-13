@@ -241,3 +241,34 @@ export type PainelAlertas = {
   pagina: number;
   tamanho: number;
 };
+
+// --- Painel da tela de Movimentação -----------------------------------------
+
+export type KpisMovimentacao = {
+  total_movimentacoes: number;
+  entradas: number;
+  saidas: number;
+  ajustes: number;
+};
+
+export type MovimentacaoListaItem = {
+  id: string;
+  produto_id: string;
+  produto_nome: string | null;
+  deposito_id: string | null;
+  deposito_nome: string | null;
+  tipo: "entrada" | "saida" | "ajuste" | "transferencia";
+  quantidade: number;
+  origem: string | null;
+  grupo_transferencia_id: string | null;
+  criado_em: string;
+};
+
+export type PainelMovimentacao = {
+  itens: MovimentacaoListaItem[];
+  kpis: KpisMovimentacao;
+  filtros: { produtos: OpcaoFiltro[] };
+  total: number;
+  pagina: number;
+  tamanho: number;
+};

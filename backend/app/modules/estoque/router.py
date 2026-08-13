@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_for_tenant
 from app.core.security import CurrentUser, get_current_user, require_perfil
 from app.modules.estoque import service
-from app.modules.estoque.schemas import MovimentacaoCreate, MovimentacaoOut, PainelEstoqueOut, SaldoProdutoOut
+from app.modules.estoque.schemas import (
+    MovimentacaoCreate,
+    MovimentacaoOut,
+    PainelEstoqueOut,
+    PainelMovimentacaoOut,
+    SaldoProdutoOut,
+)
 
 router = APIRouter(prefix="/estoque", tags=["estoque"])
 
@@ -25,6 +31,26 @@ async def registrar_movimentacao(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     return await service.registrar(db, tenant_id=user.tenant_id, usuario_id=user.id, dados=payload)
+
+
+# IMPORTANTE: "/movimentacoes/painel" precisa vir ANTES de qualquer rota
+# parametrizada equivalente — mesma ordem usada nos demais routers com painel.
+@router.get("/movimentacoes/painel", response_model=PainelMovimentacaoOut)
+async def painel_movimentacoes(
+    tipo_filtro: str | None = Query(default=None, alias="tipo"),
+    produto_id: UUID | None = Query(default=None),
+    busca: str | None = Query(default=None, max_length=200),
+    ordenar_por: str = Query(default="criado_em"),
+    direcao: str = Query(default="desc", pattern="^(asc|desc)$"),
+    pagina: int = Query(default=1, ge=1),
+    tamanho: int = Query(default=25, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    return await service.painel_movimentacoes(
+        db, tenant_id=user.tenant_id, tipo_filtro=tipo_filtro, produto_id=produto_id, busca=busca,
+        ordenar_por=ordenar_por, direcao=direcao, pagina=pagina, tamanho=tamanho,
+    )
 
 
 @router.get("/movimentacoes", response_model=list[MovimentacaoOut])

@@ -1505,3 +1505,76 @@ método das etapas anteriores.
 **Estado do rollout:** kit de UX + responsividade aplicados em
 Estoque, Produtos, Vendas, Notas Fiscais, Compras, Inventário,
 **Alertas**. Resta apenas Movimentação.
+
+## Etapa 22 — Kit de UX + responsividade em Movimentação (fecha o rollout)
+
+**Escopo:** última das telas restantes. Fecha o rollout completo do
+kit de UX + responsividade em todas as telas do produto.
+
+**Backend — novo endpoint `GET /estoque/movimentacoes/painel`:**
+
+- Vive no módulo `estoque` (não existe módulo `movimentacao` dedicado
+  — a tela consome o histórico de `Movimentacao`, que já pertence ao
+  domínio de estoque). Mantido separado de `GET /estoque/movimentacoes`
+  (listagem crua, ainda usada pelo próprio formulário de registro
+  desta tela) e de `GET /estoque/painel` (painel da tela de Estoque —
+  saldo por produto, recorte totalmente diferente de histórico de
+  lançamentos).
+- KPIs (`total_movimentacoes`, `entradas`, `saidas`, `ajustes`)
+  sempre sobre o total do tenant, sem aplicar busca/filtro.
+- Filtros: tipo, `produto_id`, busca por nome de produto ou motivo/
+  origem (`ILIKE` nos dois via `OR`), ordenação por tipo/quantidade/
+  data, paginação real.
+- Schemas novos em `estoque/schemas.py`: `KpisMovimentacaoOut`,
+  `FiltrosMovimentacaoOut`, `MovimentacaoListaItemOut`,
+  `PainelMovimentacaoOut`.
+- 7 testes novos em `tests/test_movimentacao_painel.py`: KPIs
+  refletindo entrada/saída registradas, item com nome do produto,
+  isolamento entre tenants (RLS), filtro por tipo, busca por nome de
+  produto, lista de produtos nos filtros, paginação (`total` correto).
+
+**Frontend (`app/(dashboard)/movimentacao/page.tsx` — reescrita completa):**
+
+- Formulário de registrar movimentação (entrada/saída/transferência/
+  ajuste, com campos condicionais por tipo) mantido funcionalmente
+  idêntico — inclusive o deep-link `?tipo=&produto_id=` vindo das
+  "ações rápidas" da tela de Estoque, que já existia na versão
+  anterior (`useSearchParams` dentro de `<Suspense>`, exigido pelo App
+  Router) — só ganhou layout responsivo.
+- Histórico substituído pelo painel completo do kit: KPIs, busca,
+  chips de tipo, seletor de produto, ordenação de coluna, paginação
+  real, tabela → cards no mobile. Badge de tipo colorido (verde pra
+  entrada, vermelho pra saída, neutro pra ajuste/transferência) e
+  ícone indicando quando a movimentação faz parte de um grupo de
+  transferência.
+- Sem cores legadas nesse arquivo.
+
+**Verificação:**
+
+- Backend: suíte completa rodada contra Postgres 16 local, role
+  restrita — **146/146 passando** (139 anteriores + 7 novos).
+  Durante essa etapa a suíte completa passou a estourar o limite de
+  tempo de execução do sandbox — investigado com `pg_stat_activity`
+  (sem locks travados) e `pg_stat_user_tables` (mais de 1200 tenants/
+  usuários acumulados de execuções repetidas ao longo de várias
+  etapas). Resolvido recriando a base de teste do zero
+  (`scripts/setup_test_db.sh`) — depois disso a suíte voltou a rodar
+  em ~96s. Também confirmado nesta etapa que processos em background
+  (`nohup`/nohup+setsid) não sobrevivem entre chamadas de ferramenta
+  no sandbox — Postgres precisa ser religado a cada chamada que for
+  rodar os testes, mesmo já tendo sido religado numa chamada anterior
+  na mesma sessão.
+- Frontend: `npx tsc --noEmit` limpo, `next build` completo limpo (14
+  rotas, `/movimentacao` com 3.94 kB / 111 kB First Load JS).
+
+**Entregável:** `backend/app/modules/estoque/{schemas.py,service.py,router.py}`,
+`backend/tests/test_movimentacao_painel.py`, `frontend/lib/types.ts`,
+`frontend/app/(dashboard)/movimentacao/page.tsx` +
+`estoque-inteligente-scaffold.zip` (v22).
+
+**Estado do rollout: CONCLUÍDO.** Kit de UX + responsividade
+aplicados em todas as telas do produto: Estoque, Produtos, Vendas,
+Notas Fiscais, Compras, Inventário, Alertas, Movimentação. Próximo
+destino natural do produto (não iniciado, arquitetura pendente de
+decisão): Painel Inteligente / Painel Home real, e fase PWA
+(explicitamente separada e adiada).

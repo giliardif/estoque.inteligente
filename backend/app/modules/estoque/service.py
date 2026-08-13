@@ -539,3 +539,102 @@ async def painel(
         "kpis": kpis, "filtros": filtros, "itens": itens_pagina,
         "total": total, "pagina": pagina, "tamanho": tamanho,
     }
+
+
+ORDENAVEIS_PAINEL_MOVIMENTACAO = {
+    "tipo": Movimentacao.tipo,
+    "quantidade": Movimentacao.quantidade,
+    "criado_em": Movimentacao.criado_em,
+}
+
+
+async def painel_movimentacoes(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    tipo_filtro: str | None = None,
+    produto_id: UUID | None = None,
+    busca: str | None = None,
+    ordenar_por: str = "criado_em",
+    direcao: str = "desc",
+    pagina: int = 1,
+    tamanho: int = 25,
+) -> dict:
+    """
+    Alimenta a tela de Movimentação com o kit de UX. Mantido separado de
+    GET /estoque/movimentacoes (listagem crua, ainda usada pelo próprio
+    formulário desta tela) e de /estoque/painel (recorte diferente — saldo
+    por produto da tela de Estoque, não histórico de lançamentos) — mesmo
+    padrão dos demais paineis.
+    """
+    stmt = (
+        select(Movimentacao, Produto.nome, Deposito.nome)
+        .join(Produto, Produto.id == Movimentacao.produto_id)
+        .outerjoin(Deposito, Deposito.id == Movimentacao.deposito_id)
+        .where(Movimentacao.tenant_id == tenant_id)
+    )
+    if tipo_filtro:
+        stmt = stmt.where(Movimentacao.tipo == tipo_filtro)
+    if produto_id:
+        stmt = stmt.where(Movimentacao.produto_id == produto_id)
+    if busca:
+        termo = f"%{busca}%"
+        stmt = stmt.where(or_(Produto.nome.ilike(termo), Movimentacao.origem.ilike(termo)))
+
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+
+    coluna = ORDENAVEIS_PAINEL_MOVIMENTACAO.get(ordenar_por, Movimentacao.criado_em)
+    stmt = stmt.order_by(coluna.desc() if direcao == "desc" else coluna.asc())
+    stmt = stmt.offset((pagina - 1) * tamanho).limit(tamanho)
+
+    linhas = (await db.execute(stmt)).all()
+    itens = [
+        {
+            "id": mov.id,
+            "produto_id": mov.produto_id,
+            "produto_nome": produto_nome,
+            "deposito_id": mov.deposito_id,
+            "deposito_nome": deposito_nome,
+            "tipo": mov.tipo,
+            "quantidade": mov.quantidade,
+            "origem": mov.origem,
+            "grupo_transferencia_id": mov.grupo_transferencia_id,
+            "criado_em": mov.criado_em,
+        }
+        for mov, produto_nome, deposito_nome in linhas
+    ]
+
+    # KPIs sempre sobre o total do tenant, sem aplicar busca/filtro — mesmo
+    # princípio já usado nos demais paineis com kit de UX.
+    contagens = dict(
+        (
+            await db.execute(
+                select(Movimentacao.tipo, func.count())
+                .where(Movimentacao.tenant_id == tenant_id)
+                .group_by(Movimentacao.tipo)
+            )
+        ).all()
+    )
+    total_movimentacoes = sum(contagens.values())
+
+    produtos = (
+        await db.execute(
+            select(Produto.id, Produto.nome)
+            .where(Produto.tenant_id == tenant_id, Produto.ativo.is_(True))
+            .order_by(Produto.nome)
+        )
+    ).all()
+
+    return {
+        "kpis": {
+            "total_movimentacoes": total_movimentacoes,
+            "entradas": contagens.get("entrada", 0),
+            "saidas": contagens.get("saida", 0),
+            "ajustes": contagens.get("ajuste", 0),
+        },
+        "filtros": {"produtos": [{"id": i, "nome": n} for i, n in produtos]},
+        "itens": itens,
+        "total": total,
+        "pagina": pagina,
+        "tamanho": tamanho,
+    }

@@ -146,3 +146,49 @@ class PainelEstoqueOut(BaseModel):
     total: int
     pagina: int
     tamanho: int
+
+
+# --- Painel da tela de Movimentação (Etapa 22) ------------------------------
+#
+# GET /estoque/movimentacoes/painel, separado de GET /estoque/movimentacoes
+# (listagem crua já usada, inclusive pelo formulário de registrar desta
+# mesma tela) e de GET /estoque/painel (painel da tela de Estoque, um
+# recorte diferente — saldo por produto, não histórico de lançamentos).
+# Mesmo padrão dos demais paineis com kit de UX.
+
+class KpisMovimentacaoOut(BaseModel):
+    total_movimentacoes: int
+    entradas: int
+    saidas: int
+    ajustes: int
+
+
+class OpcaoFiltroProduto(BaseModel):
+    id: UUID
+    nome: str
+
+
+class FiltrosMovimentacaoOut(BaseModel):
+    produtos: list[OpcaoFiltroProduto]
+
+
+class MovimentacaoListaItemOut(BaseModel):
+    id: UUID
+    produto_id: UUID
+    produto_nome: str | None
+    deposito_id: UUID | None
+    deposito_nome: str | None
+    tipo: str
+    quantidade: float
+    origem: str | None
+    grupo_transferencia_id: UUID | None
+    criado_em: datetime
+
+
+class PainelMovimentacaoOut(BaseModel):
+    itens: list[MovimentacaoListaItemOut]
+    kpis: KpisMovimentacaoOut
+    filtros: FiltrosMovimentacaoOut
+    total: int
+    pagina: int
+    tamanho: int
