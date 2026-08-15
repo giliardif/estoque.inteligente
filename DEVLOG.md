@@ -1578,3 +1578,123 @@ Notas Fiscais, Compras, Inventário, Alertas, Movimentação. Próximo
 destino natural do produto (não iniciado, arquitetura pendente de
 decisão): Painel Inteligente / Painel Home real, e fase PWA
 (explicitamente separada e adiada).
+
+## Etapa 23 — Painel Home real (KPIs, gráficos e cruzamento de módulos)
+
+**Escopo:** primeira versão real da tela inicial do produto (`GET /`),
+substituindo o placeholder que só mostrava alertas em aberto e estoque
+abaixo do mínimo. Prototipado antes em HTML/CSS estático (aprovado por
+Giliardi, com várias rodadas de ajuste de paleta, interatividade e
+conteúdo) e só então implementado de verdade — mesmo fluxo já usado em
+mudanças visuais significativas.
+
+**Diferença estrutural das demais etapas do rollout:** as Etapas 11–22
+sempre trabalharam dentro de um módulo (`GET /<módulo>/painel`). O Painel
+Home cruza dados de vários módulos ao mesmo tempo (estoque, movimentações,
+vendas, categorias, alertas, compras) — por isso ganhou um módulo próprio
+(`backend/app/modules/painel/`) em vez de viver dentro de um dos módulos
+existentes.
+
+**Backend — novo endpoint `GET /painel?dias=7|30|60|90`:**
+
+- Sem paginação/filtro — sempre um retrato agregado do tenant inteiro; só
+  o período do gráfico de movimentações é configurável.
+- `kpis`: valor total de estoque (saldo × custo médio, produtos ativos),
+  produtos cadastrados, entradas/saídas do mês corrente, faturamento do
+  mês corrente (vendas finalizadas). Saldo por produto calculado uma única
+  vez (`_saldos_por_produto`) e reaproveitado pelos três blocos que
+  precisam dele (KPI de valor, giro, estoque crítico) — evita repetir a
+  mesma agregação sobre `Movimentacao` três vezes.
+- `movimentacoes_periodo`: série contínua dia a dia (preenche dias sem
+  movimentação com zero — o gráfico do frontend espera uma série sem
+  buracos, não só os dias com dado).
+- `giro_estoque_top5`: giro em dias = saldo atual ÷ (saída dos últimos 30
+  dias ÷ 30). Produto sem nenhuma saída na janela fica de fora (giro
+  indefinido, não faz sentido ordenar como "mais rápido").
+- `estoque_por_categoria`: contagem de produtos ativos por categoria,
+  com percentual sobre o total — soma sempre 100% (validado em teste).
+- `estoque_critico`: produtos ativos com `estoque_minimo > 0` e saldo
+  abaixo do mínimo, com nível `"critico"` (< 50% do mínimo) ou `"baixo"`
+  (< 100%), ordenados pelo mais crítico primeiro.
+- `ultimas_movimentacoes` e `alertas` (resumo por tipo, só não lidos —
+  mesmo princípio já usado no painel de Alertas — mais contagem de
+  pedidos de compra em aberto).
+- Schemas novos em `painel/schemas.py`: `KpisPainelOut`,
+  `PontoMovimentacaoOut`, `ProdutoGiroOut`, `CategoriaResumoOut`,
+  `ProdutoCriticoOut`, `MovimentacaoRecenteOut`, `AlertasResumoOut`,
+  `PainelGeralOut`.
+- 11 testes novos em `tests/test_painel.py`: KPIs de estoque/produtos,
+  KPIs de saída/faturamento do mês, série de movimentações soma a entrada
+  da fixture, série respeita o parâmetro `dias` (7/30/90), estoque crítico
+  lista produto zerado como `"critico"`, não lista produto acima do
+  mínimo, categorias somam 100%, últimas movimentações trazem nome do
+  produto via join, giro só lista produto com saída na janela (antes e
+  depois de uma venda), alertas contam pedido em aberto, isolamento entre
+  tenants (RLS) — tanto na lista quanto no KPI agregado.
+
+**Frontend (`app/(dashboard)/page.tsx` — reescrita completa):**
+
+- 5 cartões de KPI (mesmo componente `CartaoKpi` já usado nas demais
+  telas, com ícone), unidade (`un`/`produtos`) exibida de forma discreta
+  ao lado do número — pedido explícito do Giliardi depois de notar que
+  "3.462" sozinho não deixava claro que era unidades.
+- Gráfico de movimentações em SVG puro (sem nova dependência — o projeto
+  não tinha nenhuma lib de gráficos instalada, e um gráfico de duas linhas
+  não justificava puxar uma; decisão registrada aqui em vez de silenciosa)
+  com tooltip real ao passar o mouse (linha guia + valores do dia) e
+  seletor de período (7/30/60/90 dias) que reconsulta o endpoint.
+- Estoque por Categoria em donut SVG interativo: passar o mouse (ou tocar,
+  no mobile) num segmento ou item da legenda troca o número central pela
+  quantidade daquela categoria; sem hover, mostra o total.
+- Giro de Estoque (Top 5), Alertas e Pendências, Últimas Movimentações e
+  Estoque Crítico — cada linha é clicável e abre um popup pequeno de
+  prévia (mesmo padrão visual do `ConfirmDialog` já usado no kit) com os
+  dados principais e um botão que navega para a tela de gestão
+  correspondente (`/estoque`, `/compras`, `/alertas`, `/movimentacao`) —
+  fluxo pedido explicitamente por Giliardi: prévia rápida sem sair do
+  painel, com opção de ir para a tela completa.
+- Estoque Crítico tem tabela no desktop e lista de cards no mobile
+  (`hidden md:block` / `md:hidden`), seguindo o mesmo padrão responsivo
+  do resto do kit.
+- Saudação (Bom dia/Boa tarde/Boa noite, calculado por horário local) +
+  frase de resumo + data por extenso, todos em linhas separadas por
+  pedido do Giliardi durante a prototipagem.
+- **Gap identificado e propositalmente não resolvido nesta etapa:** a
+  saudação não usa o nome do usuário porque `CurrentUser`/`/auth/*` não
+  expõe o campo `nome` (existe em `User` no banco, mas nunca foi
+  retornado pela API de auth). Corrigir isso é uma mudança pequena, mas
+  toca o módulo de auth — fora do escopo combinado ("não mexer na
+  estrutura") sem sua aprovação explícita. Fica registrado aqui para você
+  decidir se quer isso como um ajuste rápido separado.
+- Sem cores legadas — usa os tokens do tema (`--cor-*`) em tudo, com
+  algumas cores auxiliares fixas (verde-claro, âmbar, cinza, azul) só
+  onde o gráfico/donut precisam de mais tons do que os tokens oferecem
+  pra distinguir séries/categorias, mesmo raciocínio já usado no
+  protótipo HTML aprovado.
+
+**Verificação:**
+
+- Backend: suíte completa rodada contra Postgres 16 local, role
+  restrita (`NOBYPASSRLS`, confirmado via `pg_roles` antes de rodar) —
+  **157/157 passando** (146 anteriores + 11 novos). Bandit: 0 issues.
+  Ambiente desta sessão não tinha Postgres pré-instalado (sandbox novo)
+  — instalado via `apt-get install postgresql-16` antes de rodar
+  `setup_test_db.sh`.
+- Frontend: `npx tsc --noEmit` limpo, `next build` completo limpo (14
+  rotas, `/` com 6.21 kB / 113 kB First Load JS). Ajuste feito durante a
+  verificação: `TableSkeletonRows` retorna `<tr>` e só pode ser usado
+  dentro de `<table>` — os blocos que não são tabela (Giro, Alertas,
+  Últimas Movimentações) passaram a usar um skeleton próprio
+  (`SkeletonLista`); o de Estoque Crítico (que é tabela de verdade)
+  manteve `TableSkeletonRows`, agora corretamente dentro de
+  `<table><tbody>`.
+
+**Entregável:** `backend/app/modules/painel/{schemas.py,service.py,router.py}`,
+`backend/app/main.py`, `backend/tests/test_painel.py`,
+`frontend/lib/types.ts`, `frontend/app/(dashboard)/page.tsx` +
+`estoque-inteligente-scaffold.zip` (v23).
+
+**Estado do produto:** Painel Home real no ar, cruzando dados de todos os
+módulos. Fases seguintes já mapeadas no backlog: nome do usuário na
+saudação (gap acima), toggle claro/escuro (após fechar Movimentação — já
+fechada, então liberado quando você quiser), PWA (fase separada).

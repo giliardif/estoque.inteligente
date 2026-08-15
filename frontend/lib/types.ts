@@ -272,3 +272,59 @@ export type PainelMovimentacao = {
   pagina: number;
   tamanho: number;
 };
+
+// --- Painel Home (Etapa 23) --------------------------------------------------
+// Diferente dos demais paineis, este não é a tela de gestão de um módulo —
+// cruza dados de vários módulos ao mesmo tempo. Não tem paginação/filtro,
+// é sempre um retrato agregado do tenant inteiro (só o período do gráfico
+// de movimentações é configurável, via `dias`).
+
+export type KpisPainel = {
+  valor_total_estoque: number;
+  produtos_cadastrados: number;
+  entradas_mes: number;
+  saidas_mes: number;
+  faturamento_mes: number;
+};
+
+export type PontoMovimentacao = { data: string; entradas: number; saidas: number };
+
+export type ProdutoGiro = { produto_id: string; nome: string; giro_dias: number | null; saldo_atual: number };
+
+export type CategoriaResumo = { categoria_id: string | null; nome: string; produtos: number; percentual: number };
+
+export type ProdutoCritico = {
+  produto_id: string;
+  nome: string;
+  categoria_nome: string | null;
+  saldo_atual: number;
+  estoque_minimo: number;
+  nivel: "critico" | "baixo";
+};
+
+export type MovimentacaoRecente = {
+  id: string;
+  tipo: "entrada" | "saida" | "ajuste" | "transferencia";
+  produto_nome: string;
+  quantidade: number;
+  origem: string | null;
+  criado_em: string;
+};
+
+export type AlertasResumo = {
+  total_ativos: number;
+  estoque_baixo: number;
+  validade: number;
+  produto_parado: number;
+  pedidos_em_aberto: number;
+};
+
+export type PainelGeral = {
+  kpis: KpisPainel;
+  movimentacoes_periodo: PontoMovimentacao[];
+  giro_estoque_top5: ProdutoGiro[];
+  estoque_por_categoria: CategoriaResumo[];
+  estoque_critico: ProdutoCritico[];
+  ultimas_movimentacoes: MovimentacaoRecente[];
+  alertas: AlertasResumo;
+};

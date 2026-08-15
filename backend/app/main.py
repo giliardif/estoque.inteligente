@@ -13,6 +13,7 @@ from app.modules.compras.router import router as compras_router
 from app.modules.estoque.router import router as estoque_router
 from app.modules.inventario.router import router as inventario_router
 from app.modules.notas_fiscais.router import router as notas_fiscais_router
+from app.modules.painel.router import router as painel_router
 from app.modules.produtos.router import router as produtos_router
 from app.modules.vendas.router import router as vendas_router
 
@@ -63,6 +64,7 @@ app.include_router(notas_fiscais_router, prefix="/api/v1")
 app.include_router(vendas_router, prefix="/api/v1")
 app.include_router(alertas_router, prefix="/api/v1")
 app.include_router(compras_router, prefix="/api/v1")
+app.include_router(painel_router, prefix="/api/v1")
 # módulo de relatórios (endpoints agregados/analíticos) é a próxima etapa
 
 
