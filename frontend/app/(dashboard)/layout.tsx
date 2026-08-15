@@ -31,7 +31,10 @@ function LogoBloco({ tema }: { tema: ReturnType<typeof useTheme> }) {
         <Image src={tema.logo_simbolo} alt={tema.logo_texto} width={26} height={32} priority />
       ) : null}
       <div className="leading-tight">
-        <div className="font-display font-semibold text-sm">{tema.logo_texto}</div>
+        <div className="font-logotype font-bold text-sm tracking-tight">
+          <span style={{ color: "var(--cor-texto)" }}>Nex</span>
+          <span style={{ color: "var(--cor-acento)" }}>Stock</span>
+        </div>
         {tema.logo_tagline ? (
           <div
             className="text-[9px] tracking-wide font-semibold"

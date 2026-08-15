@@ -11,6 +11,7 @@ export default function LoginPage() {
   const tema = useTheme();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [manterConectado, setManterConectado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
@@ -57,7 +58,10 @@ export default function LoginPage() {
             />
           ) : null}
           <div className="text-center leading-tight">
-            <div className="font-display text-2xl font-semibold">{tema.logo_texto}</div>
+            <div className="font-logotype text-2xl font-bold tracking-tight">
+              <span style={{ color: "var(--cor-texto)" }}>Nex</span>
+              <span style={{ color: "var(--cor-acento)" }}>Stock</span>
+            </div>
             {tema.logo_tagline ? (
               <div
                 className="text-[11px] tracking-[0.18em] font-semibold mt-0.5"
@@ -112,9 +116,27 @@ export default function LoginPage() {
             required
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            className="w-full mb-6 rounded-md px-3 py-2 text-sm outline-none border transition-colors focus:border-[var(--cor-acento)]"
+            className="w-full mb-3 rounded-md px-3 py-2 text-sm outline-none border transition-colors focus:border-[var(--cor-acento)]"
             style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
           />
+
+          <div className="flex items-center justify-between text-xs mb-6">
+            <label className="flex items-center gap-1.5 cursor-pointer" style={{ color: "var(--cor-texto-muted)" }}>
+              <input
+                type="checkbox"
+                checked={manterConectado}
+                onChange={(e) => setManterConectado(e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-[var(--cor-acento)]"
+              />
+              Manter conectado
+            </label>
+            {/* Recuperação de senha ainda não existe no backend (sem endpoint) —
+                mantido como texto não clicável até essa etapa ser aprovada,
+                em vez de simular um link morto. */}
+            <span className="font-semibold cursor-not-allowed" style={{ color: "var(--cor-texto-muted)" }} title="Em breve">
+              Esqueci minha senha
+            </span>
+          </div>
 
           <button
             type="submit"
@@ -125,6 +147,13 @@ export default function LoginPage() {
             {carregando ? "Entrando..." : "Entrar"}
           </button>
         </form>
+
+        <p className="text-center text-xs mt-6" style={{ color: "var(--cor-texto-muted)" }}>
+          Ainda não tem conta?{" "}
+          <span className="font-bold" style={{ color: "var(--cor-texto)" }}>
+            Fale com nosso time
+          </span>
+        </p>
       </div>
     </div>
   );
