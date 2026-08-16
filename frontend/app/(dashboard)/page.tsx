@@ -7,7 +7,7 @@ import { PainelGeral, ProdutoGiro, ProdutoCritico, MovimentacaoRecente } from "@
 import { TableSkeletonRows } from "@/components/ui";
 import {
   Package, Layers, TrendingDown, TrendingUp, Wallet, AlertTriangle, Clock, Truck,
-  CalendarClock, ArrowRight, X, ArrowDownCircle, ArrowUpCircle,
+  CalendarClock, ArrowRight, X, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RefreshCw,
 } from "lucide-react";
 
 const OPCOES_DIAS = [7, 30, 60, 90];
@@ -55,7 +55,7 @@ export default function PainelPage() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3 lg:grid-cols-5">
         <CartaoKpi icone={Package} titulo="Valor do Estoque" valor={painel ? formatarMoeda(painel.kpis.valor_total_estoque) : "—"} />
         <CartaoKpi icone={Layers} titulo="Produtos Cadastrados" valor={painel ? `${painel.kpis.produtos_cadastrados}` : "—"} unidade="produtos" />
         <CartaoKpi icone={TrendingUp} titulo="Entradas (Mês)" valor={painel ? formatarNumero(painel.kpis.entradas_mes) : "—"} unidade="un" />
@@ -292,12 +292,12 @@ function LinhaGiro({ produto, onClick }: { produto: ProdutoGiro; onClick: () => 
   return (
     <button
       onClick={onClick}
-      className="flex items-center justify-between gap-2 py-2.5 border-b text-left last:border-b-0 hover:opacity-80"
+      className="flex flex-col gap-0.5 py-2.5 border-b text-left last:border-b-0 hover:opacity-80"
       style={{ borderColor: "var(--cor-borda)" }}
     >
       <span className="text-sm font-medium truncate">{produto.nome}</span>
-      <span className="text-xs shrink-0" style={{ color: "var(--cor-texto-muted)" }}>
-        {produto.giro_dias?.toFixed(1)} dias · {formatarNumero(produto.saldo_atual)} un
+      <span className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>
+        {produto.giro_dias?.toFixed(1)} dias de giro · {formatarNumero(produto.saldo_atual)} un em estoque
       </span>
     </button>
   );
@@ -319,10 +319,31 @@ function LinhaAlerta({
   );
 }
 
+function iconeMovimentacao(tipo: string): { Icone: typeof Package; cor: string } {
+  if (tipo === "entrada") return { Icone: ArrowDownCircle, cor: "var(--cor-acento-soft)" };
+  if (tipo === "saida") return { Icone: ArrowUpCircle, cor: "var(--cor-alerta)" };
+  if (tipo === "transferencia") return { Icone: ArrowLeftRight, cor: "var(--cor-texto-muted)" };
+  // ajuste: sinal já vem resolvido no valor — ícone/cor seguem o sinal, não o tipo
+  return { Icone: RefreshCw, cor: "#F59E0B" };
+}
+
+function formatarQuantidadeMovimentacao(mov: MovimentacaoRecente): string {
+  // entrada/saida/transferencia sempre chegam como magnitude positiva do
+  // backend (direção vem do `tipo`); só "ajuste" carrega o próprio sinal —
+  // por isso não dá pra aplicar um prefixo fixo de "-" pra tudo que não é
+  // entrada, senão um ajuste já negativo vira "--18" (bug real, reportado
+  // pelo Giliardi).
+  if (mov.tipo === "entrada") return `+${formatarNumero(mov.quantidade)} un`;
+  if (mov.tipo === "saida") return `-${formatarNumero(mov.quantidade)} un`;
+  if (mov.tipo === "ajuste") {
+    const sinal = mov.quantidade > 0 ? "+" : mov.quantidade < 0 ? "-" : "";
+    return `${sinal}${formatarNumero(Math.abs(mov.quantidade))} un`;
+  }
+  return `${formatarNumero(mov.quantidade)} un`; // transferência: magnitude só, sem sinal forçado
+}
+
 function LinhaMovimentacao({ mov, onClick }: { mov: MovimentacaoRecente; onClick: () => void }) {
-  const entrada = mov.tipo === "entrada";
-  const Icone = entrada ? ArrowDownCircle : ArrowUpCircle;
-  const cor = entrada ? "var(--cor-acento-soft)" : "var(--cor-alerta)";
+  const { Icone, cor } = iconeMovimentacao(mov.tipo);
   return (
     <button onClick={onClick} className="flex items-center gap-3 py-2.5 border-b last:border-b-0 text-left hover:opacity-80" style={{ borderColor: "var(--cor-borda)" }}>
       <Icone size={22} style={{ color: cor }} className="shrink-0" />
@@ -331,7 +352,7 @@ function LinhaMovimentacao({ mov, onClick }: { mov: MovimentacaoRecente; onClick
         <div className="text-xs mt-0.5 truncate" style={{ color: "var(--cor-texto-muted)" }}>{mov.origem || rotuloTipo(mov.tipo)}</div>
       </div>
       <div className="text-xs font-bold shrink-0" style={{ color: cor }}>
-        {entrada ? "+" : "-"}{formatarNumero(mov.quantidade)} un
+        {formatarQuantidadeMovimentacao(mov)}
       </div>
     </button>
   );
@@ -537,7 +558,7 @@ function detalheMovimentacao(m: MovimentacaoRecente): DetalhePainel {
     titulo: rotuloTipo(m.tipo), rota: "/movimentacao", labelBotao: "Ver movimentação completa",
     linhas: [
       ["Produto", m.produto_nome],
-      ["Quantidade", `${m.tipo === "entrada" ? "+" : "-"}${formatarNumero(m.quantidade)} un`],
+      ["Quantidade", formatarQuantidadeMovimentacao(m)],
       ["Origem", m.origem || "—"],
       ["Data", new Date(m.criado_em).toLocaleString("pt-BR")],
     ],

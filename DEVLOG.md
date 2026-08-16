@@ -1742,3 +1742,37 @@ de código/CSS e cálculo manual da largura disponível em cada breakpoint,
 não visual. Se ainda estiver apertado em algum tamanho de tela
 específico, me manda um print de novo que eu ajusto os breakpoints com
 mais precisão.
+
+## Correção — sinal duplicado em ajustes, Giro de Estoque cramped, KPIs em linha mais cedo
+
+Giliardi mandou novos prints (dados reais em staging desta vez, não mais
+"modo desktop") mostrando que o layout ainda não batia com o mockup
+aprovado. Achei três problemas de verdade, além do visual:
+
+**Bug real — sinal duplicado ("--18 un"):** no backend, `entrada`/`saida`/
+`transferencia` sempre gravam `quantidade` como magnitude positiva (a
+direção vem do `tipo`), mas `ajuste` grava o próprio sinal já resolvido
+(pode ser negativo — ex.: ajuste automático de fechamento de inventário
+reduzindo estoque). O frontend assumia "tudo que não é entrada leva um
+'-' na frente", então um ajuste de -18 virava "-" + "-18" = "--18 un".
+Corrigido com `formatarQuantidadeMovimentacao()`: entrada sempre "+",
+saída sempre "-", ajuste usa o próprio sinal do valor, transferência
+mostra só a magnitude (não tem uma direção única — são duas pernas por
+movimentação). Ícone/cor também passaram a seguir essa mesma regra
+(`iconeMovimentacao()`) em vez de só entrada-vs-resto.
+
+**Giro de Estoque cortando texto:** nome do produto e "X.X dias · XX un"
+tentavam caber na mesma linha dentro de um painel de ~250-300px — com
+nomes de produto maiores que "Chocolate ao Leite", cortava feio. Virou
+duas linhas (nome em cima, giro embaixo), mesmo padrão visual do resto
+do painel.
+
+**KPIs em 5 colunas mais cedo:** breakpoint de 5 colunas trazido de `xl`
+(1280px) pra `lg` (1024px) — mais perto do que o mockup mostrava, sem
+voltar ao aperto que causou a correção anterior (o `truncate` no valor
+já protege contra corte feio se ainda ficar apertado em algum
+intermediário).
+
+**Verificação:** `npx tsc --noEmit` e `next build` limpos (14 rotas).
+Mudança é só de frontend (nenhum contrato de API alterado) — suíte de
+backend não precisou rodar de novo.
