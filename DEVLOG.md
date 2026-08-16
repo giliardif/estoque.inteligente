@@ -1698,3 +1698,47 @@ existentes.
 módulos. Fases seguintes já mapeadas no backlog: nome do usuário na
 saudação (gap acima), toggle claro/escuro (após fechar Movimentação — já
 fechada, então liberado quando você quiser), PWA (fase separada).
+
+## Correção — Layout do Painel Home quebrado em telas médias/desktop estreito
+
+Giliardi reportou (com screenshots reais, celular + "modo desktop" do
+Chrome) dois problemas na Etapa 23: cartões de KPI cortados/truncados de
+forma feia, e o gráfico de Movimentações + Giro de Estoque aparecendo
+empilhado em vez de lado a lado como no protótipo aprovado.
+
+**Causa raiz:** a página do Painel foi a única do sistema a aplicar
+`max-w-6xl` no container principal — nenhuma outra tela (Vendas, Estoque,
+etc.) limita a largura assim, elas usam toda a largura disponível dentro
+do `<main>`. Combinado com a sidebar fixa de 240px, isso deixava pouco
+espaço real disponível bem no ponto exato em que os breakpoints do Painel
+mudavam de coluna (`md:grid-cols-5` a 768px de viewport — mas o viewport
+inclui a sidebar, então a área de conteúdo real nesse ponto é ~470px, não
+768px), causando o aperto visual. O split lado a lado do gráfico usava
+`lg:` (1024px de viewport), que não disparava no "modo desktop" do Chrome
+mobile (que simula ~980px) — daí aparecer empilhado mesmo "no modo
+desktop".
+
+**Correção:**
+- Removido o `max-w-6xl` — Painel agora usa a largura cheia do `<main>`,
+  igual a todas as outras telas (consistência com o padrão já
+  estabelecido, que eu tinha desviado sem perceber).
+- Grid de KPIs: de `grid-cols-2 md:grid-cols-5` para
+  `grid-cols-2 md:grid-cols-3 xl:grid-cols-5` — escala em 3 passos em vez
+  de pular direto de 2 para 5 exatamente no ponto mais apertado.
+- Split gráfico + giro de estoque: de `lg:grid-cols-[1.6fr_1fr]` para
+  `md:grid-cols-[1.6fr_1fr]` — fica lado a lado mais cedo, cobrindo o
+  caso do "modo desktop" simulado do celular.
+- Valor do KPI (não só o rótulo) agora tem `truncate` — se algum dia um
+  valor for maior que o espaço disponível, ele reticencia (`...`) em vez
+  de simplesmente cortar sem indicação visual.
+
+**Verificação:** `npx tsc --noEmit` e `next build` limpos de novo (14
+rotas). Suíte de backend re-executada por precaução mesmo sendo mudança
+só de frontend — 157/157 continuam passando.
+
+**Nota:** ainda não tenho como capturar screenshot real em diferentes
+larguras neste ambiente (sem display) — a verificação foi por inspeção
+de código/CSS e cálculo manual da largura disponível em cada breakpoint,
+não visual. Se ainda estiver apertado em algum tamanho de tela
+específico, me manda um print de novo que eu ajusto os breakpoints com
+mais precisão.

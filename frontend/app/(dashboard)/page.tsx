@@ -37,7 +37,7 @@ export default function PainelPage() {
   const [detalhe, setDetalhe] = useState<DetalhePainel | null>(null);
 
   return (
-    <div className="max-w-6xl flex flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-xl font-semibold">Painel</h1>
         <p className="text-sm mt-1.5" style={{ color: "var(--cor-texto-muted)" }}>
@@ -55,7 +55,7 @@ export default function PainelPage() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5 md:gap-3">
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3 xl:grid-cols-5">
         <CartaoKpi icone={Package} titulo="Valor do Estoque" valor={painel ? formatarMoeda(painel.kpis.valor_total_estoque) : "—"} />
         <CartaoKpi icone={Layers} titulo="Produtos Cadastrados" valor={painel ? `${painel.kpis.produtos_cadastrados}` : "—"} unidade="produtos" />
         <CartaoKpi icone={TrendingUp} titulo="Entradas (Mês)" valor={painel ? formatarNumero(painel.kpis.entradas_mes) : "—"} unidade="un" />
@@ -64,7 +64,7 @@ export default function PainelPage() {
       </div>
 
       {/* Gráfico + Giro de estoque */}
-      <div className="grid grid-cols-1 gap-4 items-start lg:grid-cols-[1.6fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-[1.6fr_1fr]">
         <div className="rounded-xl border p-4 md:p-5" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-display font-semibold text-sm">Movimentações no período</h3>
@@ -279,7 +279,7 @@ function CartaoKpi({
       </div>
       <div className="min-w-0">
         <div className="text-xs font-semibold uppercase tracking-wide truncate" style={{ color: "var(--cor-texto-muted)" }}>{titulo}</div>
-        <div className="text-lg font-display font-semibold mt-0.5">
+        <div className="text-lg font-display font-semibold mt-0.5 truncate">
           {valor}
           {unidade && <span className="text-xs font-corpo font-semibold ml-1" style={{ color: "var(--cor-texto-muted)" }}>{unidade}</span>}
         </div>
