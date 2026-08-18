@@ -279,12 +279,14 @@ export type PainelMovimentacao = {
 // é sempre um retrato agregado do tenant inteiro (só o período do gráfico
 // de movimentações é configurável, via `dias`).
 
+export type KpiComVariacao = { valor: number; variacao_percentual: number | null };
+
 export type KpisPainel = {
   valor_total_estoque: number;
-  produtos_cadastrados: number;
-  entradas_mes: number;
-  saidas_mes: number;
-  faturamento_mes: number;
+  produtos_cadastrados: KpiComVariacao;
+  entradas_mes: KpiComVariacao;
+  saidas_mes: KpiComVariacao;
+  faturamento_mes: KpiComVariacao;
 };
 
 export type PontoMovimentacao = { data: string; entradas: number; saidas: number };

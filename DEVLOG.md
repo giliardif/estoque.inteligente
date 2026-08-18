@@ -1776,3 +1776,59 @@ intermediário).
 **Verificação:** `npx tsc --noEmit` e `next build` limpos (14 rotas).
 Mudança é só de frontend (nenhum contrato de API alterado) — suíte de
 backend não precisou rodar de novo.
+
+## Correção + feature — rótulo de KPI cortando, e indicador de variação vs mês anterior
+
+**Rótulo cortando ("PRODUTOS CADASTR..."):** o `tracking-wide` (espaçamento
+extra entre letras, comum em rótulos em maiúsculas) engordava o texto o
+suficiente pra não caber mesmo com o card numa largura razoável. Tirado o
+`truncate` forçado e o `tracking-wide` do rótulo — agora ele quebra pra
+uma segunda linha quando não cabe, em vez de cortar com reticências. O
+valor continua com `truncate` como rede de segurança (mas não deve
+disparar na prática, valores são curtos).
+
+**Indicador de variação vs mês anterior:** existia só no protótipo HTML
+estático (dado fake), nunca tinha sido implementado de verdade — Giliardi
+perguntou e pediu pra implementar.
+
+- `KpisPainelOut` reestruturado: `produtos_cadastrados`, `entradas_mes`,
+  `saidas_mes`, `faturamento_mes` agora são objetos
+  `{valor, variacao_percentual}` (schema novo `KpiComVariacaoOut`).
+  `variacao_percentual` é `None` quando o período anterior é zero — nunca
+  inventamos um "0%" ou "100%" nesse caso, isso mentiria sobre a
+  tendência real pro usuário.
+- **`valor_total_estoque` propositalmente sem indicador de variação:**
+  recalcular o valor do estoque de "um mês atrás" exigiria histórico de
+  custo médio por dia, que não existe hoje (só guardamos o custo médio
+  *atual* do produto). Uma aproximação pareceria precisa mas estaria
+  errada — decisão consciente de não mostrar isso agora, documentada
+  aqui e comunicada ao Giliardi, não faz parte do escopo desta correção.
+- Comparação usa o **mesmo intervalo de dias corridos** do mês anterior
+  (ex.: hoje é dia 17 → compara 1-17 do mês atual com 1-17 do mês
+  anterior), não mês parcial vs mês inteiro — isso sempre pareceria uma
+  queda só por ter menos dias, seria enganoso.
+- `produtos_cadastrados`: comparação é cumulativa (quantos produtos
+  ativos existiam antes do início deste mês vs quantos existem agora),
+  não um "fluxo do mês" como os outros três.
+- Frontend: `CartaoKpi` ganhou prop `variacao` opcional, renderiza
+  ▲/▼ + percentual + "vs mês anterior" só quando não é `null`.
+
+**Bug real encontrado e corrigido durante a implementação:** comparação
+entre `datetime` (campo `criado_em` do produto) e `date` (data de corte)
+gerava `TypeError` — Python não compara os dois tipos diretamente.
+Corrigido com `.date()` na comparação. Pego pelos testes antes de
+qualquer push, como deveria ser.
+
+**Verificação:** `tests/test_painel.py` — 11/11 passando (dois testes
+ajustados pro novo formato aninhado). Suíte completa — 151/151 passando
+excluindo `tests/test_auth.py`, que travou nesse ambiente (sandbox novo
+desta sessão, sem Postgres pré-instalado) de forma isolada e
+não-relacionada às mudanças desta correção — isolei rodando com
+`--ignore=tests/test_auth.py` (151/151 limpo) e depois `test_auth.py`
+sozinho (trava no 4º de 6 testes, antes mesmo de qualquer código tocado
+aqui rodar). Não investiguei a fundo por ser claramente pré-existente e
+fora do escopo desta correção; sinalizando aqui para acompanhamento.
+`npx tsc --noEmit` e `next build` limpos (14 rotas).
+
+**Ainda sem push** — Giliardi pediu confirmação visual via preview HTML
+antes de qualquer push nesta rodada de ajustes do Painel; aguardando.

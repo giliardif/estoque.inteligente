@@ -16,12 +16,24 @@ from pydantic import BaseModel
 # mesmo princípio já usado nos demais paineis (KPI não reflete filtro).
 
 
+class KpiComVariacaoOut(BaseModel):
+    valor: float
+    # None quando não há base de comparação (mês anterior zerado, ou
+    # período anterior sem dado suficiente) — nunca inventamos um "0%" ou
+    # "100%" nesse caso, porque isso mentiria sobre a tendência real.
+    variacao_percentual: float | None
+
+
 class KpisPainelOut(BaseModel):
+    # Valor do Estoque não tem variação: recalcular o valor do estoque de
+    # "um mês atrás" exigiria histórico de custo médio por dia, que não
+    # existe hoje (só guardamos o custo médio atual do produto). Um número
+    # aproximado pareceria preciso mas estaria errado — melhor não mostrar.
     valor_total_estoque: float
-    produtos_cadastrados: int
-    entradas_mes: float
-    saidas_mes: float
-    faturamento_mes: float
+    produtos_cadastrados: KpiComVariacaoOut
+    entradas_mes: KpiComVariacaoOut
+    saidas_mes: KpiComVariacaoOut
+    faturamento_mes: KpiComVariacaoOut
 
 
 class PontoMovimentacaoOut(BaseModel):

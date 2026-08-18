@@ -13,8 +13,8 @@ async def test_painel_kpis_refletem_estoque_e_produtos(client_tenant_a: AsyncCli
     resp = await client_tenant_a.get("/api/v1/painel")
     assert resp.status_code == 200, resp.text
     kpis = resp.json()["kpis"]
-    assert kpis["produtos_cadastrados"] >= 1
-    assert kpis["entradas_mes"] >= 10  # a fixture já lançou uma entrada de 10
+    assert kpis["produtos_cadastrados"]["valor"] >= 1
+    assert kpis["entradas_mes"]["valor"] >= 10  # a fixture já lançou uma entrada de 10
 
 
 @pytest.mark.asyncio
@@ -28,8 +28,8 @@ async def test_painel_kpis_refletem_saida_e_faturamento_do_mes(client_tenant_a: 
     assert venda.status_code == 201
 
     depois = (await client_tenant_a.get("/api/v1/painel")).json()["kpis"]
-    assert depois["saidas_mes"] == antes["saidas_mes"] + 3
-    assert depois["faturamento_mes"] >= antes["faturamento_mes"] + 45.0
+    assert depois["saidas_mes"]["valor"] == antes["saidas_mes"]["valor"] + 3
+    assert depois["faturamento_mes"]["valor"] >= antes["faturamento_mes"]["valor"] + 45.0
 
 
 @pytest.mark.asyncio
@@ -139,4 +139,4 @@ async def test_painel_nao_vaza_dado_de_outro_tenant(
     ids_movimentacoes_a = [m["id"] for m in painel_a["ultimas_movimentacoes"]]
     assert entrada.json()[0]["id"] not in ids_movimentacoes_a
     # KPI de entradas do tenant A não pode ter sido inflado pela movimentação do tenant B
-    assert painel_a["kpis"]["entradas_mes"] < 999
+    assert painel_a["kpis"]["entradas_mes"]["valor"] < 999

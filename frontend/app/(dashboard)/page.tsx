@@ -57,10 +57,26 @@ export default function PainelPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3 lg:grid-cols-5">
         <CartaoKpi icone={Package} titulo="Valor do Estoque" valor={painel ? formatarMoeda(painel.kpis.valor_total_estoque) : "—"} />
-        <CartaoKpi icone={Layers} titulo="Produtos Cadastrados" valor={painel ? `${painel.kpis.produtos_cadastrados}` : "—"} unidade="produtos" />
-        <CartaoKpi icone={TrendingUp} titulo="Entradas (Mês)" valor={painel ? formatarNumero(painel.kpis.entradas_mes) : "—"} unidade="un" />
-        <CartaoKpi icone={TrendingDown} titulo="Saídas (Mês)" valor={painel ? formatarNumero(painel.kpis.saidas_mes) : "—"} unidade="un" />
-        <CartaoKpi icone={Wallet} titulo="Faturamento (Mês)" valor={painel ? formatarMoeda(painel.kpis.faturamento_mes) : "—"} />
+        <CartaoKpi
+          icone={Layers} titulo="Produtos Cadastrados"
+          valor={painel ? `${painel.kpis.produtos_cadastrados.valor}` : "—"} unidade="produtos"
+          variacao={painel?.kpis.produtos_cadastrados.variacao_percentual ?? null}
+        />
+        <CartaoKpi
+          icone={TrendingUp} titulo="Entradas (Mês)"
+          valor={painel ? formatarNumero(painel.kpis.entradas_mes.valor) : "—"} unidade="un"
+          variacao={painel?.kpis.entradas_mes.variacao_percentual ?? null}
+        />
+        <CartaoKpi
+          icone={TrendingDown} titulo="Saídas (Mês)"
+          valor={painel ? formatarNumero(painel.kpis.saidas_mes.valor) : "—"} unidade="un"
+          variacao={painel?.kpis.saidas_mes.variacao_percentual ?? null}
+        />
+        <CartaoKpi
+          icone={Wallet} titulo="Faturamento (Mês)"
+          valor={painel ? formatarMoeda(painel.kpis.faturamento_mes.valor) : "—"}
+          variacao={painel?.kpis.faturamento_mes.variacao_percentual ?? null}
+        />
       </div>
 
       {/* Gráfico + Giro de estoque */}
@@ -143,7 +159,7 @@ export default function PainelPage() {
           ) : painel.estoque_por_categoria.length === 0 ? (
             <p className="text-sm py-4" style={{ color: "var(--cor-texto-muted)" }}>Nenhum produto cadastrado ainda.</p>
           ) : (
-            <DonutCategoria categorias={painel.estoque_por_categoria} totalProdutos={painel.kpis.produtos_cadastrados} />
+            <DonutCategoria categorias={painel.estoque_por_categoria} totalProdutos={painel.kpis.produtos_cadastrados.valor} />
           )}
         </div>
 
@@ -267,8 +283,8 @@ function formatarNumero(v: number): string {
 }
 
 function CartaoKpi({
-  icone: Icone, titulo, valor, unidade,
-}: { icone: typeof Package; titulo: string; valor: string; unidade?: string }) {
+  icone: Icone, titulo, valor, unidade, variacao,
+}: { icone: typeof Package; titulo: string; valor: string; unidade?: string; variacao?: number | null }) {
   return (
     <div className="rounded-xl border p-3.5 md:p-4 flex gap-3" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
       <div
@@ -278,11 +294,19 @@ function CartaoKpi({
         <Icone size={18} />
       </div>
       <div className="min-w-0">
-        <div className="text-xs font-semibold uppercase tracking-wide truncate" style={{ color: "var(--cor-texto-muted)" }}>{titulo}</div>
+        <div className="text-[11px] font-semibold uppercase leading-tight" style={{ color: "var(--cor-texto-muted)" }}>{titulo}</div>
         <div className="text-lg font-display font-semibold mt-0.5 truncate">
           {valor}
           {unidade && <span className="text-xs font-corpo font-semibold ml-1" style={{ color: "var(--cor-texto-muted)" }}>{unidade}</span>}
         </div>
+        {variacao !== undefined && variacao !== null && (
+          <div
+            className="text-[11px] font-semibold mt-0.5 flex items-center gap-0.5"
+            style={{ color: variacao >= 0 ? "var(--cor-acento-soft)" : "var(--cor-alerta)" }}
+          >
+            {variacao >= 0 ? "▲" : "▼"} {Math.abs(variacao).toFixed(1)}% vs mês anterior
+          </div>
+        )}
       </div>
     </div>
   );

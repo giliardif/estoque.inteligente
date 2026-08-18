@@ -8,7 +8,7 @@ from app.db.models import (
     AlertaGerado, Categoria, Movimentacao, PedidoCompra, Produto, Venda,
 )
 from app.modules.painel.schemas import (
-    AlertasResumoOut, CategoriaResumoOut, KpisPainelOut, MovimentacaoRecenteOut,
+    AlertasResumoOut, CategoriaResumoOut, KpiComVariacaoOut, KpisPainelOut, MovimentacaoRecenteOut,
     PainelGeralOut, PontoMovimentacaoOut, ProdutoCriticoOut, ProdutoGiroOut,
 )
 
@@ -46,42 +46,91 @@ async def _saldos_por_produto(db: AsyncSession, *, tenant_id: UUID) -> dict[UUID
     return {produto_id: float(saldo or 0) for produto_id, saldo in linhas}
 
 
+def _variacao_percentual(atual: float, anterior: float) -> float | None:
+    """Variação percentual entre dois períodos. None quando o período
+    anterior é zero — não dá pra calcular variação percentual sobre uma
+    base zero (seria divisão por zero, ou um "infinito%" sem sentido pro
+    usuário), e mostrar "0%" nesse caso mentiria dizendo que não houve
+    mudança."""
+    if anterior == 0:
+        return None
+    return round((atual - anterior) / anterior * 100, 1)
+
+
+def _periodo_comparavel_mes_anterior(hoje: date) -> tuple[date, date]:
+    """Para comparar 'mês atual' com 'mês anterior' de forma justa, usa o
+    mesmo número de dias corridos em ambos — não o mês atual (parcial, até
+    hoje) contra o mês anterior inteiro, que sempre pareceria uma queda
+    só por ter menos dias. Ex.: hoje é dia 17 → compara 1-17 do mês atual
+    com 1-17 do mês anterior (ou até o último dia do mês anterior, se ele
+    tiver menos dias que isso — ex. comparando com fevereiro)."""
+    inicio_mes = hoje.replace(day=1)
+    ultimo_dia_mes_anterior = inicio_mes - timedelta(days=1)
+    inicio_mes_anterior = ultimo_dia_mes_anterior.replace(day=1)
+    fim_comparavel = min(inicio_mes_anterior + timedelta(days=hoje.day - 1), ultimo_dia_mes_anterior)
+    return inicio_mes_anterior, fim_comparavel
+
+
 async def _kpis(db: AsyncSession, *, tenant_id: UUID, saldos: dict[UUID, float]) -> KpisPainelOut:
     hoje = date.today()
     inicio_mes = hoje.replace(day=1)
+    inicio_mes_anterior, fim_mes_anterior_comparavel = _periodo_comparavel_mes_anterior(hoje)
+    # fim do intervalo é exclusivo nas queries abaixo (< fim), então soma 1 dia
+    fim_mes_anterior_exclusivo = fim_mes_anterior_comparavel + timedelta(days=1)
 
     produtos = (
         await db.execute(
-            select(Produto.id, Produto.custo_medio).where(Produto.tenant_id == tenant_id, Produto.ativo.is_(True))
-        )
-    ).all()
-    valor_total_estoque = sum(saldos.get(produto_id, 0.0) * float(custo_medio) for produto_id, custo_medio in produtos)
-    produtos_cadastrados = len(produtos)
-
-    entradas_saidas = (
-        await db.execute(
-            select(
-                func.coalesce(func.sum(case((Movimentacao.tipo == "entrada", Movimentacao.quantidade), else_=0)), 0),
-                func.coalesce(func.sum(case((Movimentacao.tipo == "saida", Movimentacao.quantidade), else_=0)), 0),
-            ).where(Movimentacao.tenant_id == tenant_id, Movimentacao.criado_em >= inicio_mes)
-        )
-    ).one()
-    entradas_mes, saidas_mes = float(entradas_saidas[0]), float(entradas_saidas[1])
-
-    faturamento_mes = (
-        await db.execute(
-            select(func.coalesce(func.sum(Venda.valor_total), 0)).where(
-                Venda.tenant_id == tenant_id, Venda.status == "finalizada", Venda.finalizado_em >= inicio_mes
+            select(Produto.id, Produto.custo_medio, Produto.criado_em).where(
+                Produto.tenant_id == tenant_id, Produto.ativo.is_(True)
             )
         )
-    ).scalar_one()
+    ).all()
+    valor_total_estoque = sum(saldos.get(produto_id, 0.0) * float(custo_medio) for produto_id, custo_medio, _ in produtos)
+    produtos_cadastrados_atual = len(produtos)
+    produtos_cadastrados_mes_anterior = sum(1 for _, _, criado_em in produtos if criado_em.date() < inicio_mes)
+
+    async def _somas_periodo(inicio, fim_exclusivo=None):
+        condicoes = [Movimentacao.tenant_id == tenant_id, Movimentacao.criado_em >= inicio]
+        if fim_exclusivo is not None:
+            condicoes.append(Movimentacao.criado_em < fim_exclusivo)
+        linha = (
+            await db.execute(
+                select(
+                    func.coalesce(func.sum(case((Movimentacao.tipo == "entrada", Movimentacao.quantidade), else_=0)), 0),
+                    func.coalesce(func.sum(case((Movimentacao.tipo == "saida", Movimentacao.quantidade), else_=0)), 0),
+                ).where(*condicoes)
+            )
+        ).one()
+        return float(linha[0]), float(linha[1])
+
+    entradas_mes, saidas_mes = await _somas_periodo(inicio_mes)
+    entradas_mes_anterior, saidas_mes_anterior = await _somas_periodo(inicio_mes_anterior, fim_mes_anterior_exclusivo)
+
+    async def _faturamento_periodo(inicio, fim_exclusivo=None):
+        condicoes = [Venda.tenant_id == tenant_id, Venda.status == "finalizada", Venda.finalizado_em >= inicio]
+        if fim_exclusivo is not None:
+            condicoes.append(Venda.finalizado_em < fim_exclusivo)
+        return float((await db.execute(select(func.coalesce(func.sum(Venda.valor_total), 0)).where(*condicoes))).scalar_one())
+
+    faturamento_mes = await _faturamento_periodo(inicio_mes)
+    faturamento_mes_anterior = await _faturamento_periodo(inicio_mes_anterior, fim_mes_anterior_exclusivo)
 
     return KpisPainelOut(
         valor_total_estoque=round(valor_total_estoque, 2),
-        produtos_cadastrados=produtos_cadastrados,
-        entradas_mes=entradas_mes,
-        saidas_mes=saidas_mes,
-        faturamento_mes=round(float(faturamento_mes), 2),
+        produtos_cadastrados=KpiComVariacaoOut(
+            valor=produtos_cadastrados_atual,
+            variacao_percentual=_variacao_percentual(produtos_cadastrados_atual, produtos_cadastrados_mes_anterior),
+        ),
+        entradas_mes=KpiComVariacaoOut(
+            valor=entradas_mes, variacao_percentual=_variacao_percentual(entradas_mes, entradas_mes_anterior)
+        ),
+        saidas_mes=KpiComVariacaoOut(
+            valor=saidas_mes, variacao_percentual=_variacao_percentual(saidas_mes, saidas_mes_anterior)
+        ),
+        faturamento_mes=KpiComVariacaoOut(
+            valor=round(faturamento_mes, 2),
+            variacao_percentual=_variacao_percentual(faturamento_mes, faturamento_mes_anterior),
+        ),
     )
 
 
