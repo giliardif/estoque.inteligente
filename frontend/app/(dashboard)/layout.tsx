@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme/useTheme";
+import ToggleTema from "@/components/ui/ToggleTema";
 import {
   LayoutGrid, Package, Boxes, ArrowLeftRight, ClipboardList, FileText,
   BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X,
@@ -111,7 +112,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <Menu size={22} />
         </button>
         <LogoBloco tema={tema} />
-        <div style={{ width: 22 }} aria-hidden />
+        <ToggleTema compacto />
       </div>
 
       {/* Sidebar fixa — desktop apenas */}
@@ -121,13 +122,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       >
         <LogoBloco tema={tema} />
         <NavLista pathname={pathname} />
-        <button
-          onClick={logout}
-          className="mt-auto flex items-center gap-2 text-xs px-2.5 py-2 rounded-lg hover:bg-white/5"
-          style={{ color: "var(--cor-texto-muted)" }}
-        >
-          <LogOut size={14} /> Sair ({usuario.perfil})
-        </button>
+        <div className="mt-auto flex flex-col gap-2">
+          <ToggleTema />
+          <button
+            onClick={logout}
+            className="flex items-center gap-2 text-xs px-2.5 py-2 rounded-lg hover:bg-white/5"
+            style={{ color: "var(--cor-texto-muted)" }}
+          >
+            <LogOut size={14} /> Sair ({usuario.perfil})
+          </button>
+        </div>
       </aside>
 
       {/* Gaveta (drawer) — mobile apenas, sobrepõe o conteúdo quando aberta */}
@@ -152,13 +156,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </button>
             </div>
             <NavLista pathname={pathname} onNavegar={() => setMenuAberto(false)} />
-            <button
-              onClick={logout}
-              className="mt-auto flex items-center gap-2 text-xs px-2.5 py-2.5 rounded-lg"
-              style={{ color: "var(--cor-texto-muted)" }}
-            >
-              <LogOut size={14} /> Sair ({usuario.perfil})
-            </button>
+            <div className="mt-auto flex flex-col gap-2">
+              <ToggleTema />
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 text-xs px-2.5 py-2.5 rounded-lg"
+                style={{ color: "var(--cor-texto-muted)" }}
+              >
+                <LogOut size={14} /> Sair ({usuario.perfil})
+              </button>
+            </div>
           </div>
           <div
             className="flex-1"

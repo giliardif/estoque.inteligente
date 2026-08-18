@@ -17,10 +17,10 @@ import {
 const TAMANHO_PAGINA = 25;
 
 const PRIORIDADE_INFO: Record<PrioridadeEstoque, { emoji: string; label: string; cor: string; bg: string }> = {
-  sem_estoque: { emoji: "🔴", label: "Sem estoque", cor: "#C25454", bg: "rgba(162,59,59,0.14)" },
-  vencimento_proximo: { emoji: "🟠", label: "Vencimento próximo", cor: "#C97A2B", bg: "rgba(191,110,36,0.14)" },
-  abaixo_minimo: { emoji: "🟡", label: "Abaixo do mínimo", cor: "#C9A62B", bg: "rgba(191,163,36,0.14)" },
-  novo: { emoji: "🔵", label: "Novo", cor: "#5B8CC9", bg: "rgba(59,111,162,0.14)" },
+  sem_estoque: { emoji: "🔴", label: "Sem estoque", cor: "var(--cor-status-esgotado)", bg: "var(--cor-status-esgotado-bg)" },
+  vencimento_proximo: { emoji: "🟠", label: "Vencimento próximo", cor: "var(--cor-status-vencimento)", bg: "var(--cor-status-vencimento-bg)" },
+  abaixo_minimo: { emoji: "🟡", label: "Abaixo do mínimo", cor: "var(--cor-status-minimo)", bg: "var(--cor-status-minimo-bg)" },
+  novo: { emoji: "🔵", label: "Novo", cor: "var(--cor-status-novo)", bg: "var(--cor-status-novo-bg)" },
   normal: { emoji: "🟢", label: "Normal", cor: "var(--cor-sucesso)", bg: "rgba(91,140,99,0.14)" },
 };
 
@@ -229,7 +229,7 @@ export default function EstoquePage() {
         <CartaoKpi titulo="Valor total a custo" valor={kpis ? formatarMoeda(kpis.valor_total_custo) : "—"} />
         <CartaoKpi
           titulo="Abaixo do mínimo" valor={kpis ? String(kpis.produtos_abaixo_minimo) : "—"}
-          destaque={(kpis?.produtos_abaixo_minimo ?? 0) > 0 ? "#C9A62B" : undefined}
+          destaque={(kpis?.produtos_abaixo_minimo ?? 0) > 0 ? "var(--cor-status-minimo)" : undefined}
           ativo={somenteAbaixoMinimo}
           onClick={() => setSomenteAbaixoMinimo((v) => !v)}
         />

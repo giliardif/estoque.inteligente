@@ -1832,3 +1832,90 @@ fora do escopo desta correção; sinalizando aqui para acompanhamento.
 
 **Ainda sem push** — Giliardi pediu confirmação visual via preview HTML
 antes de qualquer push nesta rodada de ajustes do Painel; aguardando.
+
+## Etapa 24 — Light/dark mode toggle
+
+Toggle de tema claro/escuro em todo o app, seguindo o protótipo aprovado
+visualmente com o Giliardi antes da implementação (mockup React comparando
+os dois modos lado a lado com os tokens reais da marca).
+
+**Arquitetura escolhida:** o sistema já usava CSS variables (`--cor-base`,
+`--cor-acento` etc.) aplicadas em runtime por `ThemeProvider`
+(`lib/theme/useTheme.tsx`) a partir de um JSON por tenant
+(`themes/nexstock.tokens.json`) — pensado desde a Etapa 15 pra permitir
+override de identidade visual por tenant. Em vez de introduzir um segundo
+mecanismo (ex.: `dark:` classes do Tailwind), o dark/light mode foi
+encaixado nesse mesmo sistema: o JSON agora tem duas chaves,
+`modos.escuro` e `modos.claro`, cada uma com o conjunto completo de
+tokens. Um tenant com override futuro pode customizar um modo, os dois,
+ou nenhum — o modo escuro continua sendo o padrão do produto quando não
+há preferência salva nem sinal do sistema operacional.
+
+**`useTheme.tsx`:**
+- `ModoTema = "escuro" | "claro"`, guardado em `localStorage`
+  (`nexstock-modo-tema`).
+- Sem preferência salva, respeita `prefers-color-scheme` do navegador;
+  sem nenhum sinal, cai no escuro (comportamento atual preservado).
+- `alternarModo()` troca o modo, persiste e reaplica os tokens via
+  `root.style.setProperty` — mesmo mecanismo que já existia, sem
+  reescrever componentes.
+- `root.style.colorScheme` e `data-tema` também setados, pra scrollbars/
+  inputs nativos do navegador acompanharem o modo.
+
+**`ToggleTema.tsx`** (novo, em `components/ui/`): botão com ícone
+Sun/Moon, dois modos de exibição (`compacto` pro header mobile, completo
+pra sidebar). Adicionado na sidebar desktop e no drawer mobile (acima do
+"Sair"), e no header mobile (substituindo o spacer vazio que existia só
+pra centralizar a logo).
+
+**Paleta clara** (calibrada pra contraste, não é a escura invertida):
+- `cor_base` / `cor_superficie`: `#F1F4F9` / `#FFFFFF` (fundo com leve
+  profundidade, não branco puro direto no app)
+- `cor_texto`: `#0D182A` — reaproveita o próprio tom do fundo escuro
+  atual como cor de texto no claro
+- `cor_acento`: `#059669` (não é o `#10B981` original — esse verde perde
+  contraste em fundo branco; testado no protótipo aprovado)
+- `cor_acento_soft`: `#047857` — no escuro esse token é usado como
+  variante *mais clara* (texto/ícone que precisa "pular" no fundo
+  escuro); no claro a relação se inverte e ele precisa ser *mais escuro*
+  que o acento base pra continuar legível como texto em fundo branco
+  (usado em links "ver mais", indicador de variação positiva, ícone de
+  entrada)
+- `cor_marca_azul` (`#2563EB`) e o gradiente da logo **não mudam** entre
+  modos — regra de marca, reservado só pro logotipo
+
+**Tokens novos** (não existiam antes, criados porque só faziam sentido
+com dois modos): `cor_aviso` (amber, antes hardcoded como `#F59E0B` em 4
+lugares do Painel), `cor_grafico_neutro` (linha "saídas" do gráfico do
+Painel), `cor_grafico_extra_1/2` (cores extras do donut de categoria),
+`cor_status_esgotado/vencimento/minimo/novo` + suas variantes `_bg`
+(badges de status na tela de Estoque, antes 5 hex hardcoded). Todos com
+par escuro/claro calibrado — no claro em geral mais escuros/saturados
+que no escuro, pra manter contraste em fundo branco.
+
+**Limpeza:** zero hex hardcoded restante fora do sistema de tokens em
+todo o frontend (`grep -rE "#[0-9A-Fa-f]{6}"` em `app/`, `components/`,
+`lib/` só retorna o fallback intencional de `--cor-marca-azul` no
+gradiente do login, que é o mesmo valor em ambos os modos mesmo).
+
+**Verificação:** `npx tsc --noEmit` limpo, `next build` limpo (14 rotas,
+sem warnings novos). Suíte completa do backend rodada mesmo sendo etapa
+100% frontend — 157/157 passando (ambiente sandbox desta sessão não
+tinha Postgres pré-instalado; instalado via apt + roles restritos
+recriados do zero com `setup_test_db.sh`, incluindo `test_auth.py` que
+tinha travado isoladamente numa sessão anterior — rodou limpo desta vez).
+Bandit sem achados.
+
+**Escopo consciente:** não foi tocado nenhum componente do kit de UX
+(`Toast`, `ConfirmDialog`, etc.) — todos já consumem as CSS variables
+existentes, então herdam o modo claro automaticamente sem alteração.
+
+**Nota de backlog (posicionamento do toggle):** o protótipo inicial
+mostrava o botão de tema numa barra superior no desktop (ao lado de um
+ícone de notificação), mas essa barra não existe no layout real — o
+desktop hoje é só sidebar fixa + `<main>`, sem topbar. O toggle foi
+posicionado no rodapé da sidebar (acima de "Sair") e no header mobile
+existente. Giliardi já indicou que no futuro vai querer avaliar a
+introdução de uma barra superior no desktop — quando isso entrar em
+pauta, o toggle deve ser realocado pra lá. Registrado aqui pra não se
+perder; não implementar proativamente, só quando ele pedir.

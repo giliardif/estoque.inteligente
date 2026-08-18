@@ -12,7 +12,7 @@ import {
 
 const OPCOES_DIAS = [7, 30, 60, 90];
 
-const CORES_CATEGORIA = ["var(--cor-acento)", "var(--cor-acento-soft)", "#6EE7B7", "#F59E0B", "#94A3B8", "#60A5FA"];
+const CORES_CATEGORIA = ["var(--cor-acento)", "var(--cor-acento-soft)", "var(--cor-grafico-extra-1)", "var(--cor-aviso)", "var(--cor-grafico-neutro)", "var(--cor-grafico-extra-2)"];
 
 export default function PainelPage() {
   const router = useRouter();
@@ -145,7 +145,7 @@ export default function PainelPage() {
               <LinhaAlerta icone={Truck} cor="var(--cor-acento-soft)" titulo="Pedidos em aberto"
                 sub={`${painel.alertas.pedidos_em_aberto} pedido(s) aguardando recebimento`}
                 onClick={() => router.push("/compras")} />
-              <LinhaAlerta icone={CalendarClock} cor="#F59E0B" titulo="Validade próxima"
+              <LinhaAlerta icone={CalendarClock} cor="var(--cor-aviso)" titulo="Validade próxima"
                 sub={`${painel.alertas.validade} produto(s) vencendo em breve`}
                 onClick={() => router.push("/alertas")} />
             </div>
@@ -348,7 +348,7 @@ function iconeMovimentacao(tipo: string): { Icone: typeof Package; cor: string }
   if (tipo === "saida") return { Icone: ArrowUpCircle, cor: "var(--cor-alerta)" };
   if (tipo === "transferencia") return { Icone: ArrowLeftRight, cor: "var(--cor-texto-muted)" };
   // ajuste: sinal já vem resolvido no valor — ícone/cor seguem o sinal, não o tipo
-  return { Icone: RefreshCw, cor: "#F59E0B" };
+  return { Icone: RefreshCw, cor: "var(--cor-aviso)" };
 }
 
 function formatarQuantidadeMovimentacao(mov: MovimentacaoRecente): string {
@@ -391,7 +391,7 @@ function BadgeNivel({ nivel }: { nivel: "critico" | "baixo" }) {
   return (
     <span
       className="text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0"
-      style={critico ? { background: "rgba(239,68,68,0.15)", color: "var(--cor-alerta)" } : { background: "rgba(245,158,11,0.15)", color: "#F59E0B" }}
+      style={critico ? { background: "rgba(239,68,68,0.15)", color: "var(--cor-alerta)" } : { background: "rgba(245,158,11,0.15)", color: "var(--cor-aviso)" }}
     >
       {critico ? "Crítico" : "Baixo"}
     </span>
@@ -409,7 +409,7 @@ function LinhaCritica({ produto, onClick }: { produto: ProdutoCritico; onClick: 
       </td>
       <td className="py-2.5">
         <div className="w-[90px] h-1.5 rounded-full overflow-hidden" style={{ background: "var(--cor-base)" }}>
-          <div className="h-full rounded-full" style={{ width: `${percentual}%`, background: produto.nivel === "critico" ? "var(--cor-alerta)" : "#F59E0B" }} />
+          <div className="h-full rounded-full" style={{ width: `${percentual}%`, background: produto.nivel === "critico" ? "var(--cor-alerta)" : "var(--cor-aviso)" }} />
         </div>
       </td>
       <td className="py-2.5"><BadgeNivel nivel={produto.nivel} /></td>
@@ -508,20 +508,20 @@ function GraficoMovimentacoes({ pontos }: { pontos: { data: string; entradas: nu
     <div className="relative">
       <div className="flex items-center gap-4 text-xs mb-2" style={{ color: "var(--cor-texto-muted)" }}>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: "var(--cor-acento-soft)" }} />Entradas</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: "#93A5C4" }} />Saídas</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: "var(--cor-grafico-neutro)" }} />Saídas</span>
       </div>
       <svg viewBox="0 0 600 210" width="100%" height="210" onMouseMove={aoMoverMouse} onMouseLeave={() => setHoverIdx(null)}>
         <defs>
           <linearGradient id="gradEntradasPainel" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#34D399" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#34D399" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--cor-acento-soft)" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="var(--cor-acento-soft)" stopOpacity="0" />
           </linearGradient>
         </defs>
         <line x1={x0} y1={y1} x2={x0} y2={y0} stroke="var(--cor-borda)" />
         <line x1={x0} y1={y0} x2={x1} y2={y0} stroke="var(--cor-borda)" />
         <polygon points={areaEntradas} fill="url(#gradEntradasPainel)" />
-        <polyline points={pontosEntradas} fill="none" stroke="#34D399" strokeWidth="2.5" />
-        <polyline points={pontosSaidas} fill="none" stroke="#93A5C4" strokeWidth="2.5" />
+        <polyline points={pontosEntradas} fill="none" stroke="var(--cor-acento-soft)" strokeWidth="2.5" />
+        <polyline points={pontosSaidas} fill="none" stroke="var(--cor-grafico-neutro)" strokeWidth="2.5" />
         {hoverIdx !== null && (
           <line x1={xAt(hoverIdx)} y1={y1} x2={xAt(hoverIdx)} y2={y0} stroke="rgba(243,244,246,0.15)" />
         )}
@@ -543,8 +543,8 @@ function GraficoMovimentacoes({ pontos }: { pontos: { data: string; entradas: nu
           }}
         >
           <div className="font-bold mb-1">{formatarDataCurta(ponto.data)}</div>
-          <div style={{ color: "#34D399" }}>Entradas: {formatarNumero(ponto.entradas)} un</div>
-          <div style={{ color: "#93A5C4" }}>Saídas: {formatarNumero(ponto.saidas)} un</div>
+          <div style={{ color: "var(--cor-acento-soft)" }}>Entradas: {formatarNumero(ponto.entradas)} un</div>
+          <div style={{ color: "var(--cor-grafico-neutro)" }}>Saídas: {formatarNumero(ponto.saidas)} un</div>
         </div>
       )}
     </div>
