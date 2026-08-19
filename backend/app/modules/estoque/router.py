@@ -72,7 +72,7 @@ async def saldo_geral(
     return await service.saldo_geral(db, tenant_id=user.tenant_id)
 
 
-ORDENAVEIS = {"nome", "sku", "saldo", "custo_medio", "valor_total_custo", "estoque_minimo", "criado_em"}
+ORDENAVEIS = {"nome", "sku", "saldo", "custo_medio", "preco_venda", "valor_total_custo", "estoque_minimo", "criado_em"}
 
 
 @router.get("/painel", response_model=PainelEstoqueOut)

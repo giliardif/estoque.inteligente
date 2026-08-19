@@ -466,7 +466,8 @@ async def painel(
     stmt = (
         select(
             Produto.id, Produto.nome, Produto.sku, Produto.codigo_barras, Produto.categoria_id,
-            Categoria.nome.label("categoria_nome"), Produto.unidade_medida, Produto.custo_medio,
+            Categoria.nome.label("categoria_nome"), Produto.marca, Produto.imagem_url,
+            Produto.unidade_medida, Produto.custo_medio, Produto.preco_venda,
             Produto.estoque_minimo, Produto.ativo, Produto.criado_em, subq_saldo.c.saldo,
         )
         .outerjoin(Categoria, Categoria.id == Produto.categoria_id)
@@ -485,7 +486,7 @@ async def painel(
 
     agora = datetime.now(timezone.utc)
     itens = []
-    for produto_id, nome, sku, codigo_barras, categoria_id_linha, categoria_nome, unidade, custo_medio, estoque_minimo, ativo, criado_em, saldo in linhas:
+    for produto_id, nome, sku, codigo_barras, categoria_id_linha, categoria_nome, marca, imagem_url, unidade, custo_medio, preco_venda, estoque_minimo, ativo, criado_em, saldo in linhas:
         if deposito_id and not any(p["deposito_id"] == deposito_id for p in posicoes_por_produto.get(produto_id, [])):
             continue
         if produtos_do_fornecedor is not None and produto_id not in produtos_do_fornecedor:
@@ -507,10 +508,13 @@ async def painel(
         if somente_vencimento_proximo and prioridade != "vencimento_proximo":
             continue
 
+        preco_venda_f = float(preco_venda) if preco_venda is not None else None
         itens.append({
             "produto_id": produto_id, "nome": nome, "sku": sku, "codigo_barras": codigo_barras,
-            "categoria_id": categoria_id_linha, "categoria_nome": categoria_nome, "unidade_medida": unidade,
-            "saldo": saldo_f, "custo_medio": float(custo_medio), "valor_total_custo": round(saldo_f * float(custo_medio), 2),
+            "categoria_id": categoria_id_linha, "categoria_nome": categoria_nome,
+            "marca": marca, "imagem_url": imagem_url, "unidade_medida": unidade,
+            "saldo": saldo_f, "custo_medio": float(custo_medio), "preco_venda": preco_venda_f,
+            "valor_total_custo": round(saldo_f * float(custo_medio), 2),
             "estoque_minimo": float(estoque_minimo), "ativo": ativo, "criado_em": criado_em,
             "proxima_validade": proxima_validade, "prioridade": prioridade,
             "posicoes": posicoes_por_produto.get(produto_id, []),
@@ -522,6 +526,7 @@ async def painel(
         "sku": lambda i: (i["sku"] or "").lower(),
         "saldo": lambda i: i["saldo"],
         "custo_medio": lambda i: i["custo_medio"],
+        "preco_venda": lambda i: i["preco_venda"] if i["preco_venda"] is not None else -1,
         "valor_total_custo": lambda i: i["valor_total_custo"],
         "estoque_minimo": lambda i: i["estoque_minimo"],
         "criado_em": lambda i: i["criado_em"],

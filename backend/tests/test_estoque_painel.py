@@ -314,3 +314,48 @@ async def test_filtros_disponiveis_nao_incluem_categorias_de_outro_tenant(
     nomes_categorias = [c["nome"] for c in resp.json()["filtros"]["categorias"]]
     assert "Categoria do Tenant A" in nomes_categorias
     assert "Categoria do Tenant B" not in nomes_categorias
+
+
+@pytest.mark.asyncio
+async def test_painel_estoque_expoe_preco_venda_marca_e_imagem(client_tenant_a: AsyncClient):
+    """
+    Etapa 25: preço de venda, marca e imagem de Produto precisam refletir
+    também no painel de Estoque. Margem, por decisão de produto, fica só na
+    tela de Produtos — não é reexibida aqui (não é uma métrica de posição de
+    estoque, é constante em relação ao saldo).
+    """
+    await client_tenant_a.post(
+        "/api/v1/produtos",
+        json={
+            "nome": "Ovo de Páscoa 250g", "custo_medio": 10.0, "preco_venda": 25.0,
+            "marca": "Doce Encanto", "imagem_url": "https://exemplo.com/ovo.jpg",
+        },
+    )
+
+    resp = await client_tenant_a.get("/api/v1/estoque/painel")
+    item = next(i for i in resp.json()["itens"] if i["nome"] == "Ovo de Páscoa 250g")
+    assert item["preco_venda"] == 25.0
+    assert item["marca"] == "Doce Encanto"
+    assert item["imagem_url"] == "https://exemplo.com/ovo.jpg"
+    assert "margem_percentual" not in item
+
+
+@pytest.mark.asyncio
+async def test_painel_estoque_produto_sem_preco_venda_tem_campos_none(client_tenant_a: AsyncClient):
+    await client_tenant_a.post("/api/v1/produtos", json={"nome": "Produto simples do estoque"})
+
+    resp = await client_tenant_a.get("/api/v1/estoque/painel")
+    item = next(i for i in resp.json()["itens"] if i["nome"] == "Produto simples do estoque")
+    assert item["preco_venda"] is None
+    assert item["marca"] is None
+    assert item["imagem_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_painel_estoque_ordena_por_preco_venda(client_tenant_a: AsyncClient):
+    await client_tenant_a.post("/api/v1/produtos", json={"nome": "Barato", "preco_venda": 3.0})
+    await client_tenant_a.post("/api/v1/produtos", json={"nome": "Caro", "preco_venda": 50.0})
+
+    resp = await client_tenant_a.get("/api/v1/estoque/painel", params={"ordenar_por": "preco_venda", "direcao": "desc"})
+    nomes = [i["nome"] for i in resp.json()["itens"]]
+    assert nomes.index("Caro") < nomes.index("Barato")

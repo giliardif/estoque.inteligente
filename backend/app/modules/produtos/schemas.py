@@ -11,6 +11,11 @@ class ProdutoBase(BaseModel):
     codigo_barras: str | None = Field(default=None, max_length=64)
     unidade_medida: str = Field(default="un", max_length=10)
     custo_medio: float = Field(default=0, ge=0)
+    preco_venda: float | None = Field(default=None, ge=0)
+    marca: str | None = Field(default=None, max_length=120)
+    ncm: str | None = Field(default=None, max_length=20)
+    imagem_url: str | None = Field(default=None, max_length=2048)
+    controla_lote: bool = Field(default=False)
     estoque_minimo: float = Field(default=0, ge=0)
     estoque_maximo: float | None = Field(default=None, ge=0)
     # Campos livres do segmento (ex: validade, sabor) — validados contra o
@@ -58,6 +63,11 @@ class ProdutoUpdate(BaseModel):
     categoria_id: UUID | None = None
     codigo_barras: str | None = None
     custo_medio: float | None = Field(default=None, ge=0)
+    preco_venda: float | None = Field(default=None, ge=0)
+    marca: str | None = Field(default=None, max_length=120)
+    ncm: str | None = Field(default=None, max_length=20)
+    imagem_url: str | None = Field(default=None, max_length=2048)
+    controla_lote: bool | None = None
     estoque_minimo: float | None = Field(default=None, ge=0)
     estoque_maximo: float | None = Field(default=None, ge=0)
     campos_customizados: dict | None = None
@@ -107,6 +117,12 @@ class ProdutoListaItemOut(BaseModel):
     codigo_barras: str | None
     unidade_medida: str
     custo_medio: float
+    preco_venda: float | None
+    margem_percentual: float | None
+    marca: str | None
+    ncm: str | None
+    imagem_url: str | None
+    controla_lote: bool
     estoque_minimo: float
     estoque_maximo: float | None
     ativo: bool

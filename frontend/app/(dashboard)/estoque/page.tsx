@@ -103,9 +103,13 @@ export default function EstoquePage() {
   const usaDepositos = (painel?.filtros.depositos.length ?? 0) > 0;
 
   function linhasParaCsv(lista: ItemEstoque[]): string {
-    const cabecalho = ["Produto", "SKU", "Categoria", "Saldo", "Custo médio", "Valor total", "Mínimo", "Prioridade"];
+    const cabecalho = [
+      "Produto", "SKU", "Categoria", "Marca", "Saldo", "Custo médio", "Preço de venda",
+      "Valor total", "Mínimo", "Prioridade",
+    ];
     const linhas = lista.map((i) => [
-      i.nome, i.sku ?? "", i.categoria_nome ?? "", String(i.saldo), i.custo_medio.toFixed(2),
+      i.nome, i.sku ?? "", i.categoria_nome ?? "", i.marca ?? "", String(i.saldo), i.custo_medio.toFixed(2),
+      i.preco_venda != null ? i.preco_venda.toFixed(2) : "",
       i.valor_total_custo.toFixed(2), String(i.estoque_minimo), PRIORIDADE_INFO[i.prioridade].label,
     ]);
     return [cabecalho, ...linhas]
@@ -373,10 +377,14 @@ export default function EstoquePage() {
                     onChange={() => selecao.alternar(item.produto_id)}
                     aria-label={`Selecionar ${item.nome}`}
                   />
+                  {item.imagem_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.imagem_url} alt="" className="w-9 h-9 rounded-md object-cover shrink-0 border" style={{ borderColor: "var(--cor-borda)" }} />
+                  ) : null}
                   <div className="min-w-0">
                     <div className="font-medium text-sm truncate">{item.nome}</div>
                     <div className="text-xs truncate" style={{ color: "var(--cor-texto-muted)" }}>
-                      {item.sku ?? "—"}{item.categoria_nome ? ` · ${item.categoria_nome}` : ""}
+                      {item.sku ?? "—"}{item.categoria_nome ? ` · ${item.categoria_nome}` : ""}{item.marca ? ` · ${item.marca}` : ""}
                     </div>
                   </div>
                 </div>
@@ -402,10 +410,14 @@ export default function EstoquePage() {
                 </span>
               </div>
 
-              <div className={`grid gap-2 pt-2 border-t text-xs ${usaDepositos ? "grid-cols-2" : "grid-cols-3"}`} style={{ borderColor: "var(--cor-borda)" }}>
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t text-xs" style={{ borderColor: "var(--cor-borda)" }}>
                 <div>
                   <div style={{ color: "var(--cor-texto-muted)" }}>Custo médio</div>
                   <div className="font-medium mt-0.5">{formatarMoeda(item.custo_medio)}</div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--cor-texto-muted)" }}>Venda</div>
+                  <div className="font-medium mt-0.5">{item.preco_venda != null ? formatarMoeda(item.preco_venda) : "—"}</div>
                 </div>
                 <div>
                   <div style={{ color: "var(--cor-texto-muted)" }}>Valor total</div>
@@ -446,6 +458,7 @@ export default function EstoquePage() {
               <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--cor-texto-muted)" }}>Categoria</th>
               <ThOrdenavel label="Saldo" campo="saldo" campoAtivo={ordenarPor} direcao={direcao} onClick={alternarOrdenacao} />
               <ThOrdenavel label="Custo médio" campo="custo_medio" campoAtivo={ordenarPor} direcao={direcao} onClick={alternarOrdenacao} />
+              <ThOrdenavel label="Preço de venda" campo="preco_venda" campoAtivo={ordenarPor} direcao={direcao} onClick={alternarOrdenacao} />
               <ThOrdenavel label="Valor total" campo="valor_total_custo" campoAtivo={ordenarPor} direcao={direcao} onClick={alternarOrdenacao} />
               <ThOrdenavel label="Mínimo" campo="estoque_minimo" campoAtivo={ordenarPor} direcao={direcao} onClick={alternarOrdenacao} />
               {usaDepositos && (
@@ -456,10 +469,10 @@ export default function EstoquePage() {
             </tr>
           </thead>
           <tbody>
-            {carregando && <TableSkeletonRows colunas={usaDepositos ? 9 : 8} linhas={8} />}
+            {carregando && <TableSkeletonRows colunas={usaDepositos ? 10 : 9} linhas={8} />}
             {!carregando && itens.length === 0 && (
               <tr>
-                <td colSpan={usaDepositos ? 9 : 8} className="px-5 py-8 text-center text-sm" style={{ color: "var(--cor-texto-muted)" }}>
+                <td colSpan={usaDepositos ? 10 : 9} className="px-5 py-8 text-center text-sm" style={{ color: "var(--cor-texto-muted)" }}>
                   {painel && painel.total === 0 && !buscaDebounced && !categoriaId && !depositoId && !fornecedorId
                     ? "Nenhum produto cadastrado ainda."
                     : "Nenhum produto encontrado com esses filtros."}
@@ -479,12 +492,27 @@ export default function EstoquePage() {
                     />
                   </td>
                   <td className="px-3 py-3">
-                    <div className="font-medium">{item.nome}</div>
-                    {item.sku && <div className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>{item.sku}</div>}
+                    <div className="flex items-center gap-2.5">
+                      {item.imagem_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.imagem_url} alt="" className="w-8 h-8 rounded-md object-cover shrink-0 border" style={{ borderColor: "var(--cor-borda)" }} />
+                      ) : null}
+                      <div className="min-w-0">
+                        <div className="font-medium">{item.nome}</div>
+                        {(item.sku || item.marca) && (
+                          <div className="text-xs truncate" style={{ color: "var(--cor-texto-muted)" }}>
+                            {item.sku ?? ""}{item.sku && item.marca ? " · " : ""}{item.marca ?? ""}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>{item.categoria_nome ?? "—"}</td>
                   <td className="px-3 py-3 font-semibold">{item.saldo} <span className="font-normal text-xs" style={{ color: "var(--cor-texto-muted)" }}>{item.unidade_medida}</span></td>
                   <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>{formatarMoeda(item.custo_medio)}</td>
+                  <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>
+                    {item.preco_venda != null ? formatarMoeda(item.preco_venda) : "—"}
+                  </td>
                   <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>{formatarMoeda(item.valor_total_custo)}</td>
                   <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>{item.estoque_minimo}</td>
                   {usaDepositos && (

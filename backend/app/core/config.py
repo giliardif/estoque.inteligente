@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     # Upload de XML de NF-e
     MAX_UPLOAD_SIZE_MB: int = 5
 
+    # Supabase Storage — upload de imagem de produto (Etapa 25). Bucket
+    # público: caminho é prefixado por tenant_id/produto_id (UUIDs não
+    # adivinháveis), risco aceitável pra foto de produto (não é dado
+    # sensível). SERVICE_ROLE_KEY nunca deve ir para o frontend — só o
+    # backend fala com o Storage.
+    SUPABASE_URL: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_STORAGE_BUCKET: str = "produtos-imagens"
+    MAX_IMAGEM_PRODUTO_SIZE_MB: int = 3
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_not_default(cls, v: str) -> str:

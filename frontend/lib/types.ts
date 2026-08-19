@@ -7,6 +7,11 @@ export type Produto = {
   codigo_barras: string | null;
   unidade_medida: string;
   custo_medio: number;
+  preco_venda: number | null;
+  marca: string | null;
+  ncm: string | null;
+  imagem_url: string | null;
+  controla_lote: boolean;
   estoque_minimo: number;
   estoque_maximo: number | null;
   campos_customizados: Record<string, unknown>;
@@ -21,6 +26,10 @@ export type ProdutoCreateInput = {
   codigo_barras?: string | null;
   unidade_medida?: string;
   custo_medio?: number;
+  preco_venda?: number | null;
+  marca?: string | null;
+  ncm?: string | null;
+  controla_lote?: boolean;
   estoque_minimo?: number;
   estoque_maximo?: number | null;
   campos_customizados?: Record<string, unknown>;
@@ -55,9 +64,12 @@ export type ItemEstoque = {
   codigo_barras: string | null;
   categoria_id: string | null;
   categoria_nome: string | null;
+  marca: string | null;
+  imagem_url: string | null;
   unidade_medida: string;
   saldo: number;
   custo_medio: number;
+  preco_venda: number | null;
   valor_total_custo: number;
   estoque_minimo: number;
   ativo: boolean;
@@ -87,6 +99,12 @@ export type ItemProdutoLista = {
   codigo_barras: string | null;
   unidade_medida: string;
   custo_medio: number;
+  preco_venda: number | null;
+  margem_percentual: number | null;
+  marca: string | null;
+  ncm: string | null;
+  imagem_url: string | null;
+  controla_lote: boolean;
   estoque_minimo: number;
   estoque_maximo: number | null;
   ativo: boolean;

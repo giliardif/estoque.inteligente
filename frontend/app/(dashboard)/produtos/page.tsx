@@ -79,10 +79,15 @@ export default function ProdutosPage() {
   }
 
   function linhasParaCsv(lista: ItemProdutoLista[]): string {
-    const cabecalho = ["Produto", "SKU", "Categoria", "Código de barras", "Unidade", "Custo médio", "Mínimo", "Status"];
+    const cabecalho = [
+      "Produto", "SKU", "Categoria", "Marca", "Código de barras", "Unidade",
+      "Custo médio", "Preço de venda", "Margem (%)", "Mínimo", "Status",
+    ];
     const linhas = lista.map((i) => [
-      i.nome, i.sku ?? "", i.categoria_nome ?? "", i.codigo_barras ?? "", i.unidade_medida,
-      i.custo_medio.toFixed(2), String(i.estoque_minimo), i.ativo ? "Ativo" : "Inativo",
+      i.nome, i.sku ?? "", i.categoria_nome ?? "", i.marca ?? "", i.codigo_barras ?? "", i.unidade_medida,
+      i.custo_medio.toFixed(2), i.preco_venda != null ? i.preco_venda.toFixed(2) : "",
+      i.margem_percentual != null ? i.margem_percentual.toFixed(1) : "",
+      String(i.estoque_minimo), i.ativo ? "Ativo" : "Inativo",
     ]);
     return [cabecalho, ...linhas]
       .map((linha) => linha.map((campo) => `"${campo.replace(/"/g, '""')}"`).join(","))
@@ -215,7 +220,11 @@ export default function ProdutosPage() {
       </div>
 
       {mostrarForm && (
-        <ProdutoForm onSalvo={() => { setMostrarForm(false); carregar(); }} onCancelar={() => setMostrarForm(false)} />
+        <ProdutoForm
+          categorias={painel?.filtros.categorias ?? []}
+          onSalvo={() => { setMostrarForm(false); carregar(); }}
+          onCancelar={() => setMostrarForm(false)}
+        />
       )}
 
       {erro && (
@@ -260,10 +269,14 @@ export default function ProdutosPage() {
                   onChange={() => selecao.alternar(p.id)}
                   aria-label={`Selecionar ${p.nome}`}
                 />
+                {p.imagem_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.imagem_url} alt="" className="w-9 h-9 rounded-md object-cover shrink-0 border" style={{ borderColor: "var(--cor-borda)" }} />
+                ) : null}
                 <div className="min-w-0">
                   <div className="font-medium text-sm truncate">{p.nome}</div>
                   <div className="text-xs truncate" style={{ color: "var(--cor-texto-muted)" }}>
-                    {p.sku ?? "—"}{p.categoria_nome ? ` · ${p.categoria_nome}` : ""}
+                    {p.sku ?? "—"}{p.categoria_nome ? ` · ${p.categoria_nome}` : ""}{p.marca ? ` · ${p.marca}` : ""}
                   </div>
                 </div>
               </div>
@@ -293,9 +306,19 @@ export default function ProdutosPage() {
 
             <div className="grid grid-cols-3 gap-2 pt-2 border-t text-xs" style={{ borderColor: "var(--cor-borda)" }}>
               <div>
-                <div style={{ color: "var(--cor-texto-muted)" }}>Custo médio</div>
+                <div style={{ color: "var(--cor-texto-muted)" }}>Custo</div>
                 <div className="font-medium mt-0.5">R$ {p.custo_medio.toFixed(2)}</div>
               </div>
+              <div>
+                <div style={{ color: "var(--cor-texto-muted)" }}>Venda</div>
+                <div className="font-medium mt-0.5">{p.preco_venda != null ? `R$ ${p.preco_venda.toFixed(2)}` : "—"}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--cor-texto-muted)" }}>Margem</div>
+                <div className="font-medium mt-0.5">{p.margem_percentual != null ? `${p.margem_percentual.toFixed(1)}%` : "—"}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <div style={{ color: "var(--cor-texto-muted)" }}>Mínimo</div>
                 <div className="font-medium mt-0.5">{p.estoque_minimo}</div>
@@ -328,16 +351,18 @@ export default function ProdutosPage() {
               <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--cor-texto-muted)" }}>Código</th>
               <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--cor-texto-muted)" }}>Unidade</th>
               <ThOrdenavel label="Custo médio" campo="custo_medio" campoAtivo={ordenarPor} direcao={direcao} onClick={alternarOrdenacao} />
+              <ThOrdenavel label="Preço de venda" campo="preco_venda" campoAtivo={ordenarPor} direcao={direcao} onClick={alternarOrdenacao} />
+              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--cor-texto-muted)" }}>Margem</th>
               <ThOrdenavel label="Mínimo" campo="estoque_minimo" campoAtivo={ordenarPor} direcao={direcao} onClick={alternarOrdenacao} />
               <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--cor-texto-muted)" }}>Status</th>
               <th className="w-8" />
             </tr>
           </thead>
           <tbody>
-            {carregando && <TableSkeletonRows colunas={10} linhas={8} />}
+            {carregando && <TableSkeletonRows colunas={12} linhas={8} />}
             {!carregando && itens.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-5 py-8 text-center text-sm" style={{ color: "var(--cor-texto-muted)" }}>
+                <td colSpan={12} className="px-5 py-8 text-center text-sm" style={{ color: "var(--cor-texto-muted)" }}>
                   {painel && painel.total === 0 && !buscaDebounced && !categoriaId && !somenteInativos
                     ? "Nenhum produto cadastrado ainda."
                     : "Nenhum produto encontrado com esses filtros."}
@@ -360,6 +385,21 @@ export default function ProdutosPage() {
                 <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>{p.codigo_barras ?? "—"}</td>
                 <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>{p.unidade_medida}</td>
                 <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>R$ {p.custo_medio.toFixed(2)}</td>
+                <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>
+                  {p.preco_venda != null ? `R$ ${p.preco_venda.toFixed(2)}` : "—"}
+                </td>
+                <td className="px-3 py-3">
+                  {p.margem_percentual != null ? (
+                    <span
+                      className="text-xs font-semibold px-2 py-1 rounded-full"
+                      style={{ color: "var(--cor-acento)", background: "rgba(16,185,129,0.14)" }}
+                    >
+                      {p.margem_percentual.toFixed(1)}%
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--cor-texto-muted)" }}>—</span>
+                  )}
+                </td>
                 <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>{p.estoque_minimo}</td>
                 <td className="px-3 py-3">
                   <span
@@ -396,10 +436,13 @@ export default function ProdutosPage() {
         <div className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-6 overflow-y-auto" style={{ background: "rgba(10,8,6,0.55)" }} onClick={() => setProdutoEditando(null)}>
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md max-h-full overflow-y-auto">
             <ProdutoForm
+              categorias={painel?.filtros.categorias ?? []}
               produto={{
                 id: produtoEditando.id, tenant_id: "", nome: produtoEditando.nome, sku: produtoEditando.sku,
                 categoria_id: produtoEditando.categoria_id, codigo_barras: produtoEditando.codigo_barras,
                 unidade_medida: produtoEditando.unidade_medida, custo_medio: produtoEditando.custo_medio,
+                preco_venda: produtoEditando.preco_venda, marca: produtoEditando.marca, ncm: produtoEditando.ncm,
+                imagem_url: produtoEditando.imagem_url, controla_lote: produtoEditando.controla_lote,
                 estoque_minimo: produtoEditando.estoque_minimo, estoque_maximo: produtoEditando.estoque_maximo,
                 campos_customizados: {}, ativo: produtoEditando.ativo, criado_em: produtoEditando.criado_em,
               }}

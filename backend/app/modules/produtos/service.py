@@ -57,6 +57,16 @@ async def atualizar(db: AsyncSession, *, tenant_id: UUID, produto_id: UUID, dado
     return produto
 
 
+async def definir_imagem(db: AsyncSession, *, tenant_id: UUID, produto_id: UUID, imagem_url: str):
+    produto = await obter(db, tenant_id=tenant_id, produto_id=produto_id)
+    if not produto:
+        return None
+    produto.imagem_url = imagem_url
+    await db.commit()
+    await db.refresh(produto)
+    return produto
+
+
 async def desativar(db: AsyncSession, *, tenant_id: UUID, produto_id: UUID) -> bool:
     stmt = (
         update(Produto)
@@ -72,9 +82,23 @@ ORDENAVEIS_PAINEL = {
     "nome": Produto.nome,
     "sku": Produto.sku,
     "custo_medio": Produto.custo_medio,
+    "preco_venda": Produto.preco_venda,
     "estoque_minimo": Produto.estoque_minimo,
     "criado_em": Produto.criado_em,
 }
+
+
+def calcular_margem_percentual(custo_medio: float, preco_venda: float | None) -> float | None:
+    """
+    Margem sobre o preço de venda: (venda - custo) / venda * 100.
+    Nunca persistida — sempre derivada em runtime de custo_medio e
+    preco_venda, pra nunca divergir do que os dois campos realmente valem.
+    None quando não há preço de venda definido ou ele é zero (divisão
+    indefinida).
+    """
+    if not preco_venda:
+        return None
+    return round((preco_venda - custo_medio) / preco_venda * 100, 2)
 
 
 async def painel(
@@ -98,8 +122,9 @@ async def painel(
     stmt = (
         select(
             Produto.id, Produto.nome, Produto.sku, Produto.categoria_id, Categoria.nome.label("categoria_nome"),
-            Produto.codigo_barras, Produto.unidade_medida, Produto.custo_medio, Produto.estoque_minimo,
-            Produto.estoque_maximo, Produto.ativo, Produto.criado_em,
+            Produto.codigo_barras, Produto.unidade_medida, Produto.custo_medio, Produto.preco_venda,
+            Produto.marca, Produto.ncm, Produto.imagem_url, Produto.controla_lote,
+            Produto.estoque_minimo, Produto.estoque_maximo, Produto.ativo, Produto.criado_em,
         )
         .outerjoin(Categoria, Categoria.id == Produto.categoria_id)
         .where(Produto.tenant_id == tenant_id)
@@ -124,6 +149,11 @@ async def painel(
             "id": row.id, "nome": row.nome, "sku": row.sku, "categoria_id": row.categoria_id,
             "categoria_nome": row.categoria_nome, "codigo_barras": row.codigo_barras,
             "unidade_medida": row.unidade_medida, "custo_medio": float(row.custo_medio),
+            "preco_venda": float(row.preco_venda) if row.preco_venda is not None else None,
+            "margem_percentual": calcular_margem_percentual(
+                float(row.custo_medio), float(row.preco_venda) if row.preco_venda is not None else None
+            ),
+            "marca": row.marca, "ncm": row.ncm, "imagem_url": row.imagem_url, "controla_lote": row.controla_lote,
             "estoque_minimo": float(row.estoque_minimo),
             "estoque_maximo": float(row.estoque_maximo) if row.estoque_maximo is not None else None,
             "ativo": row.ativo, "criado_em": row.criado_em,

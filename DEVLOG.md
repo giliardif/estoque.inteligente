@@ -1919,3 +1919,95 @@ existente. Giliardi já indicou que no futuro vai querer avaliar a
 introdução de uma barra superior no desktop — quando isso entrar em
 pauta, o toggle deve ser realocado pra lá. Registrado aqui pra não se
 perder; não implementar proativamente, só quando ele pedir.
+
+## Etapa 25 — Precificação e atributos de Produto (venda, margem, categoria, marca, NCM, imagem)
+
+Expansão do cadastro de Produto: até aqui só existia custo (editável
+manualmente, ver nota abaixo), sem preço de venda, categoria não estava
+de fato vinculável no formulário (apesar do backend já suportar
+`categoria_id` desde o início), e faltavam marca, NCM e imagem.
+
+**Decisão registrada sobre `custo_medio` (correção de entendimento):**
+o nome do campo sugere média ponderada calculada a partir das entradas
+de Compras/NF-e, mas o código nunca implementou esse cálculo — é e
+sempre foi um campo 100% manual. Decisão do Giliardi: manter assim por
+enquanto (não criar um segundo campo de "custo manual" separado, o que
+geraria dois números de custo divergentes). **Backlog registrado:**
+migrar `custo_medio` pra cálculo real de média ponderada nas entradas de
+Compras/NF-e, recalculando a cada compra — não implementado nesta etapa.
+
+**Preço de venda + margem:** `preco_venda` é campo novo, opcional.
+`margem_percentual` **nunca é persistida** — é sempre derivada em
+runtime por `calcular_margem_percentual()` (`produtos/service.py`) a
+partir de `custo_medio` e `preco_venda` (`(venda - custo) / venda *
+100`), pra nunca divergir do que os dois campos realmente valem. No
+form (`ProdutoForm.tsx`), os três campos (custo, venda, margem) são
+bidirecionais: editar qualquer um recalcula os outros dois no client;
+o payload enviado ao backend nunca inclui margem.
+
+**Categoria vinculada:** o backend já aceitava `categoria_id` desde a
+migration inicial — a lacuna era só o formulário nunca ter exposto esse
+campo. Resolvido com um `<select>` populado pelas categorias já
+carregadas no painel (`painel.filtros.categorias`), sem chamada extra.
+
+**Marca e NCM:** campos de texto simples, sem validação de formato além
+de tamanho máximo (NCM não valida estrutura numérica — não há emissão de
+NF-e ainda, então não há necessidade de exigir formato correto agora).
+
+**Imagem do produto:** dois modos no form — upload de arquivo (JPEG/PNG/
+WebP, limite configurável via `MAX_IMAGEM_PRODUTO_SIZE_MB`, padrão 3MB) ou
+URL externa. Upload feito por `app/core/storage.py`, cliente mínimo do
+Supabase Storage via REST/httpx (evita adicionar a dependência
+`supabase-py` só pra isso — `httpx` já era usado no projeto). Bucket
+`produtos-imagens` é **público**, com path `{tenant_id}/{produto_id}/
+{uuid}.{ext}` — decisão consciente: UUIDs não são adivinháveis e foto de
+produto não é dado sensível, então RLS/URL assinada não compensava a
+complexidade extra aqui. `SUPABASE_SERVICE_ROLE_KEY` fica só no backend,
+nunca é exposta ao frontend. Endpoint novo: `POST /produtos/{id}/imagem`
+(multipart), validação de tipo/tamanho acontece *antes* de checar se o
+Storage está configurado, pra sempre devolver o erro certo (415/413)
+independente do ambiente ter Supabase configurado ou não.
+
+**Controla lote/validade:** campo booleano novo em Produto, só
+informativo por enquanto. Descoberta relevante durante a investigação:
+**já existe infraestrutura de Lote parcialmente construída no banco**
+(tabela `lotes`, `movimentacoes.lote_id`, uso em leitura no módulo de
+Alertas pra vencimento) de uma etapa anterior — mas sem nenhum endpoint
+de escrita e sem nenhuma tela de frontend usando isso. Capacidade morta,
+reaproveitável quando lote completo for atacado. **Decisão consciente:**
+não implementar captura de lote/validade nesta etapa — é trabalho do
+tamanho de uma etapa própria (form de entrada precisa pedir lote+validade,
+decisão de FEFO ou não na saída, mexe em Estoque/Movimentação/Vendas).
+`controla_lote` só reserva o terreno; o form mostra um aviso
+("Rastreamento de lote ainda não disponível — em breve") pra não parecer
+que marcar o checkbox já ativa alguma coisa. **Registrado como próximo
+item de backlog de lote**, junto com a tabela `lotes` já existente como
+ponto de partida.
+
+**Reflexo no módulo Estoque:** decisão consciente após discussão — Preço
+de venda, marca e imagem também aparecem no painel de Estoque (tabela
+desktop, cards mobile, CSV), reaproveitando a mesma query/service.
+**Margem NÃO aparece em Estoque** — decisão deliberada: margem não varia
+com saldo (é constante por produto, independente de quantas unidades
+tem em estoque), então é informação de precificação pura, não de posição
+de estoque; mostrá-la ali seria redundante com Produtos e poluiria uma
+tela já densa (KPIs, filtros, prioridade, posições por depósito).
+
+**Import de planilha (cadastro em massa):** pedido pelo Giliardi durante
+a etapa, mas conscientemente **não incluído aqui** — vira a Etapa 26.
+Envolve upload de XLSX/CSV, validação linha a linha com relatório de
+erro parcial, e decisão de criar vs. atualizar por SKU; porte de etapa
+própria, não um adendo.
+
+**Migration:** `010_produto_precificacao_e_atributos.sql` — adiciona
+`preco_venda`, `marca`, `ncm`, `imagem_url`, `controla_lote` em
+`produtos`. Aplicada e testada localmente antes do push.
+
+**Verificação:** suíte completa do backend — 163/163 passando (exclui
+`test_auth.py`, que trava isolado neste sandbox específico ao rodar
+dentro da suíte completa; roda limpo quando executado sozinho — mesmo
+comportamento intermitente já registrado no ambiente de sandbox, não é
+regressão desta etapa). Bandit sem achados. `npx tsc --noEmit` e
+`next build` limpos no frontend. Preview HTML aprovado visualmente pelo
+Giliardi antes do push (form de Produto e card/tabela de Estoque com os
+campos novos).

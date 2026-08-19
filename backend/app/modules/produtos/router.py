@@ -2,11 +2,12 @@ from collections.abc import AsyncGenerator
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_for_tenant
 from app.core.security import CurrentUser, get_current_user, require_perfil
+from app.core.storage import enviar_imagem_produto
 from app.modules.produtos import service
 from app.modules.produtos.schemas import PainelProdutosOut, ProdutoCreate, ProdutoOut, ProdutoUpdate
 
@@ -80,6 +81,20 @@ async def atualizar_produto(
     if not produto:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Produto não encontrado.")
     return produto
+
+
+@router.post("/{produto_id}/imagem", response_model=ProdutoOut)
+async def enviar_imagem(
+    produto_id: UUID,
+    arquivo: UploadFile = File(...),
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    produto_existente = await service.obter(db, tenant_id=user.tenant_id, produto_id=produto_id)
+    if not produto_existente:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Produto não encontrado.")
+    url = await enviar_imagem_produto(tenant_id=user.tenant_id, produto_id=produto_id, arquivo=arquivo)
+    return await service.definir_imagem(db, tenant_id=user.tenant_id, produto_id=produto_id, imagem_url=url)
 
 
 @router.delete("/{produto_id}", status_code=status.HTTP_204_NO_CONTENT)

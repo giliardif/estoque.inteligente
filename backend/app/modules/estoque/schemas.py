@@ -123,9 +123,12 @@ class ItemEstoqueOut(BaseModel):
     codigo_barras: str | None
     categoria_id: UUID | None
     categoria_nome: str | None
+    marca: str | None
+    imagem_url: str | None
     unidade_medida: str
     saldo: float
     custo_medio: float
+    preco_venda: float | None
     valor_total_custo: float
     estoque_minimo: float
     ativo: bool
