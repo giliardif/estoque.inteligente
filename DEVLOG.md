@@ -2011,3 +2011,89 @@ regressão desta etapa). Bandit sem achados. `npx tsc --noEmit` e
 `next build` limpos no frontend. Preview HTML aprovado visualmente pelo
 Giliardi antes do push (form de Produto e card/tabela de Estoque com os
 campos novos).
+
+## Etapa 26 — Import em massa de produtos via planilha (XLSX/CSV)
+
+Cadastro de produto em lote a partir de planilha, pedido explicitamente
+por Giliardi ao final da Etapa 25. Três decisões de negócio confirmadas
+com ele antes de implementar:
+- **SKU já existente** (no banco do tenant, ou duplicado dentro da
+  própria planilha) → linha é **rejeitada com erro**, não atualiza o
+  produto existente.
+- **Categoria informada que ainda não existe** → **criada
+  automaticamente** (mesmo nome reaproveitado se várias linhas da
+  planilha citarem a mesma categoria nova).
+- **Fluxo:** sempre passa por preview (mostra linha a linha o que vai
+  acontecer, sem gravar nada) antes de confirmar.
+
+**Arquitetura em duas chamadas, stateless (sem sessão/arquivo temporário
+guardado no servidor entre elas):**
+- `POST /produtos/importar/preview` (multipart) — parseia o arquivo,
+  valida cada linha de forma independente (uma linha inválida não afeta
+  as outras) e devolve o relatório completo sem gravar nada no banco.
+- `POST /produtos/importar/confirmar` (JSON) — recebe de volta os dados
+  já normalizados das linhas que o preview marcou como válidas e
+  **revalida tudo do zero contra o estado atual do banco** antes de
+  gravar. Isso cobre o caso de outro usuário ter cadastrado o mesmo SKU
+  no intervalo entre o preview e a confirmação (testado explicitamente:
+  `test_confirmar_revalida_sku_criado_entre_preview_e_confirmacao`).
+
+**Parsing** (`produtos/importacao.py`, funções puras sem acesso a
+banco): `.xlsx` via `openpyxl` (`read_only=True`, streaming, sem
+carregar a planilha inteira na memória) e `.csv` com detecção automática
+de delimitador (`,` ou `;` — planilhas exportadas do Excel BR costumam
+vir com `;`) e fallback de encoding UTF-8 → Latin-1. Números aceitam
+formato BR (`1.234,56`) e internacional (`1234.56`).
+
+**Colunas aceitas:** `nome` (obrigatório), `sku`, `categoria`,
+`codigo_barras`, `unidade_medida`, `custo_medio`, `preco_venda`,
+`marca`, `ncm`, `estoque_minimo`, `estoque_maximo`. Ficaram de fora
+desta etapa, deliberadamente: `imagem_url` (upload é por produto,
+individual) e `controla_lote`/`campos_customizados` (específicos demais
+pra planilha genérica).
+
+**Limites** (config, não hardcoded): `MAX_IMPORT_PRODUTOS_SIZE_MB=5`,
+`MAX_IMPORT_PRODUTOS_LINHAS=1000` — proteção contra DoS por planilha
+gigante, já que toda a validação do lote acontece em memória antes de
+qualquer gravação.
+
+**Planilha modelo:** botão "Baixar planilha modelo (.csv)" gera o CSV
+inteiramente no client (sem chamada ao backend) — decisão consciente de
+oferecer só `.csv` como modelo (mesmo o import aceitando `.xlsx`
+também), pra não precisar adicionar a lib SheetJS só pra gerar um
+`.xlsx` estático; quem preferir `.xlsx` salva o CSV nesse formato depois
+de preencher no Excel.
+
+**Frontend:** `ImportarProdutosDialog.tsx`, modal de 3 passos (upload →
+preview com tabela linha a linha e badges de resumo → resultado com
+lista de erros). Botão "Importar planilha" ao lado de "Novo produto" na
+toolbar de Produtos. Preview HTML fiel (mesmas classes/tokens/sidebar de
+240px) aprovado por Giliardi antes de implementar o componente real —
+uma rodada de correção no meio do processo: o mockup usava `<script
+src=".../tailwind.min.css">` (arquivo CSS carregado como script, não
+aplicava nenhuma classe) — trocado por `cdn.tailwindcss.com`, que gera
+as classes via JS e funciona de forma confiável em HTML solto.
+
+**Restrição de perfil:** só `admin` e `operador` podem importar
+(`require_perfil`) — mesmo padrão já usado nos outros endpoints de
+escrita de Produtos. Testado explicitamente que `leitura` recebe 403 em
+ambos os endpoints.
+
+**Verificação:** suíte completa do backend — 179/179 passando (163
+anteriores + 16 novos testes de import, cobrindo: parsing CSV/XLSX,
+formato decimal BR, nome vazio, SKU duplicado no arquivo, SKU já
+existente no banco, estoque máximo menor que mínimo, formato de arquivo
+não suportado (415), planilha vazia (422), limite de linhas excedido
+(413), criação de produtos e categorias, revalidação na confirmação,
+isolamento entre tenants — SKU de um tenant não bloqueia outro tenant —
+e restrição por perfil). Exclui `test_auth.py` (comportamento
+intermitente já registrado, não é regressão). Bandit sem achados.
+`npx tsc --noEmit` e `next build` limpos no frontend.
+
+**Nota de infraestrutura do sandbox:** durante a verificação final, o
+cluster Postgres local caiu entre chamadas de bash (processo não
+persiste entre invocações de tool — comportamento já documentado) e a
+suíte inteira falhou com `ConnectionRefusedError`. Não foi regressão:
+reiniciado o cluster (`pg_ctlcluster 16 main start`) na mesma chamada
+que rodou os testes, e a suíte voltou a passar 179/179 de forma limpa.
+

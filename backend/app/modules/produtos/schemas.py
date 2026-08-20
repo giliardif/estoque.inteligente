@@ -135,3 +135,57 @@ class PainelProdutosOut(BaseModel):
     total: int
     pagina: int
     tamanho: int
+
+
+# --- Import em massa via planilha (Etapa 26) --------------------------------
+#
+# Fluxo em duas etapas, ambas stateless (sem guardar arquivo/sessão no
+# servidor entre as chamadas):
+#   1. POST /produtos/importar/preview — parseia e valida tudo, não grava
+#      nada. Retorna linha a linha o que é válido e o que tem erro.
+#   2. POST /produtos/importar/confirmar — recebe de volta os dados já
+#      normalizados das linhas que o usuário confirmou. Revalida cada linha
+#      no servidor (o preview pode estar desatualizado — outro usuário pode
+#      ter criado o mesmo SKU nesse meio-tempo) e só então grava.
+
+class ProdutoImportLinhaEntrada(BaseModel):
+    linha: int
+    nome: str | None = None
+    sku: str | None = None
+    categoria: str | None = None
+    codigo_barras: str | None = None
+    unidade_medida: str | None = None
+    custo_medio: float | None = None
+    preco_venda: float | None = None
+    marca: str | None = None
+    ncm: str | None = None
+    estoque_minimo: float | None = None
+    estoque_maximo: float | None = None
+
+
+class ProdutoImportItemOut(BaseModel):
+    linha: int
+    status: str  # "ok" | "erro"
+    erro: str | None = None
+    dados: ProdutoImportLinhaEntrada | None = None
+    categoria_sera_criada: bool = False
+    produto_id: UUID | None = None  # só preenchido na resposta de confirmação
+
+
+class ProdutoImportPreviewOut(BaseModel):
+    itens: list[ProdutoImportItemOut]
+    total_linhas: int
+    total_validas: int
+    total_com_erro: int
+    categorias_novas: list[str]
+
+
+class ProdutoImportConfirmarIn(BaseModel):
+    linhas: list[ProdutoImportLinhaEntrada] = Field(min_length=1, max_length=1000)
+
+
+class ProdutoImportResultadoOut(BaseModel):
+    criados: int
+    rejeitados: int
+    categorias_criadas: list[str]
+    itens: list[ProdutoImportItemOut]

@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_BUCKET: str = "produtos-imagens"
     MAX_IMAGEM_PRODUTO_SIZE_MB: int = 3
 
+    # Import de produtos em massa via planilha (Etapa 26). Limites conservadores
+    # de propósito: evita DoS por planilha gigante (linha a linha é validada em
+    # memória, sem streaming pro banco até a confirmação).
+    MAX_IMPORT_PRODUTOS_SIZE_MB: int = 5
+    MAX_IMPORT_PRODUTOS_LINHAS: int = 1000
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_not_default(cls, v: str) -> str:

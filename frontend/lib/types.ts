@@ -119,6 +119,47 @@ export type PainelProdutos = {
   tamanho: number;
 };
 
+// --- Import em massa de produtos via planilha (Etapa 26) --------------------
+
+export type ProdutoImportLinhaDados = {
+  linha: number;
+  nome: string | null;
+  sku: string | null;
+  categoria: string | null;
+  codigo_barras: string | null;
+  unidade_medida: string | null;
+  custo_medio: number | null;
+  preco_venda: number | null;
+  marca: string | null;
+  ncm: string | null;
+  estoque_minimo: number | null;
+  estoque_maximo: number | null;
+};
+
+export type ProdutoImportItem = {
+  linha: number;
+  status: "ok" | "erro";
+  erro: string | null;
+  dados: ProdutoImportLinhaDados | null;
+  categoria_sera_criada: boolean;
+  produto_id: string | null;
+};
+
+export type ProdutoImportPreview = {
+  itens: ProdutoImportItem[];
+  total_linhas: number;
+  total_validas: number;
+  total_com_erro: number;
+  categorias_novas: string[];
+};
+
+export type ProdutoImportResultado = {
+  criados: number;
+  rejeitados: number;
+  categorias_criadas: string[];
+  itens: ProdutoImportItem[];
+};
+
 // --- Painel da tela de Vendas -----------------------------------------------
 
 export type StatusVenda = "finalizada" | "cancelada";

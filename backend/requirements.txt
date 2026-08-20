@@ -11,6 +11,7 @@ slowapi==0.1.9
 defusedxml==0.7.1
 python-multipart>=0.0.31
 alembic==1.13.2
+openpyxl==3.1.5
 
 # --- segurança / testes (dev e CI, não vai para produção) ---
 bandit==1.7.9

@@ -5,11 +5,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db_for_tenant
 from app.core.security import CurrentUser, get_current_user, require_perfil
 from app.core.storage import enviar_imagem_produto
 from app.modules.produtos import service
-from app.modules.produtos.schemas import PainelProdutosOut, ProdutoCreate, ProdutoOut, ProdutoUpdate
+from app.modules.produtos.schemas import (
+    PainelProdutosOut, ProdutoCreate, ProdutoImportConfirmarIn, ProdutoImportPreviewOut,
+    ProdutoImportResultadoOut, ProdutoOut, ProdutoUpdate,
+)
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
 
@@ -47,6 +51,35 @@ async def painel_produtos(
         db, tenant_id=user.tenant_id, busca=busca, categoria_id=categoria_id, status_ativo=status_ativo,
         ordenar_por=ordenar_por, direcao=direcao, pagina=pagina, tamanho=tamanho,
     )
+
+
+@router.post("/importar/preview", response_model=ProdutoImportPreviewOut)
+async def preview_importacao_produtos(
+    arquivo: UploadFile = File(...),
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    settings = get_settings()
+    conteudo = await arquivo.read()
+    limite_bytes = settings.MAX_IMPORT_PRODUTOS_SIZE_MB * 1024 * 1024
+    if len(conteudo) > limite_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Arquivo excede o limite de {settings.MAX_IMPORT_PRODUTOS_SIZE_MB}MB.",
+        )
+    return await service.preview_importacao(
+        db, tenant_id=user.tenant_id, nome_arquivo=arquivo.filename or "",
+        conteudo=conteudo, max_linhas=settings.MAX_IMPORT_PRODUTOS_LINHAS,
+    )
+
+
+@router.post("/importar/confirmar", response_model=ProdutoImportResultadoOut)
+async def confirmar_importacao_produtos(
+    payload: ProdutoImportConfirmarIn,
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    return await service.confirmar_importacao(db, tenant_id=user.tenant_id, linhas=payload.linhas)
 
 
 @router.get("/{produto_id}", response_model=ProdutoOut)

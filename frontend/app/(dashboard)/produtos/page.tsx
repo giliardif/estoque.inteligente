@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { ItemProdutoLista, PainelProdutos } from "@/lib/types";
 import { ProdutoForm } from "@/components/produtos/ProdutoForm";
+import { ImportarProdutosDialog } from "@/components/produtos/ImportarProdutosDialog";
 import {
   useToast, ConfirmDialog, QuickCreateDialog, TableSkeletonRows, Pagination, ThOrdenavel, TrHover,
   useSelecaoMultipla, BulkActionBar, RowMenu, useDebouncedValue, useKeyboardShortcuts,
 } from "@/components/ui";
-import { Search, Plus, Download, Pencil } from "lucide-react";
+import { Search, Plus, Download, Pencil, Upload } from "lucide-react";
 
 const TAMANHO_PAGINA = 25;
 
@@ -33,6 +34,7 @@ export default function ProdutosPage() {
   const [desativando, setDesativando] = useState(false);
   const [criarCategoria, setCriarCategoria] = useState(false);
   const [salvandoCategoria, setSalvandoCategoria] = useState(false);
+  const [mostrarImportar, setMostrarImportar] = useState(false);
 
   const buscaRef = useRef<HTMLInputElement>(null);
 
@@ -210,14 +212,31 @@ export default function ProdutosPage() {
           </div>
         </div>
 
-        <button
-          onClick={() => setMostrarForm((v) => !v)}
-          className="flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2.5 md:py-2 text-sm font-bold"
-          style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
-        >
-          <Plus size={15} /> Novo produto <span className="opacity-60 text-xs hidden md:inline">(N)</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMostrarImportar(true)}
+            className="flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2.5 md:py-2 text-sm font-bold border"
+            style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
+          >
+            <Upload size={15} /> Importar planilha
+          </button>
+
+          <button
+            onClick={() => setMostrarForm((v) => !v)}
+            className="flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2.5 md:py-2 text-sm font-bold"
+            style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
+          >
+            <Plus size={15} /> Novo produto <span className="opacity-60 text-xs hidden md:inline">(N)</span>
+          </button>
+        </div>
       </div>
+
+      {mostrarImportar && (
+        <ImportarProdutosDialog
+          onFechar={() => setMostrarImportar(false)}
+          onConcluido={() => carregar()}
+        />
+      )}
 
       {mostrarForm && (
         <ProdutoForm
