@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { PainelGeral, ProdutoGiro, ProdutoCritico, MovimentacaoRecente } from "@/lib/types";
 import { TableSkeletonRows } from "@/components/ui";
 import {
@@ -16,6 +17,7 @@ const CORES_CATEGORIA = ["var(--cor-acento)", "var(--cor-acento-soft)", "var(--c
 
 export default function PainelPage() {
   const router = useRouter();
+  const { usuario } = useAuth();
   const [dias, setDias] = useState(7);
   const [painel, setPainel] = useState<PainelGeral | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -29,7 +31,11 @@ export default function PainelPage() {
       .finally(() => setCarregando(false));
   }, [dias]);
 
-  const saudacao = useMemo(() => saudacaoPorHorario(), []);
+  const primeiroNome = useMemo(() => (usuario?.nome ? usuario.nome.trim().split(/\s+/)[0] : ""), [usuario?.nome]);
+  const saudacao = useMemo(
+    () => saudacaoPorHorario() + (primeiroNome ? `, ${primeiroNome}` : ""),
+    [primeiroNome]
+  );
   const dataExtenso = useMemo(() => new Date().toLocaleDateString("pt-BR", {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
   }), []);

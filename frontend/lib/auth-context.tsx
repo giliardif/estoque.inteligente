@@ -4,7 +4,13 @@ import { createContext, useContext, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, definirAccessToken } from "@/lib/api";
 
-type Usuario = { id: string; tenant_id: string; perfil: "admin" | "operador" | "leitura"; deve_trocar_senha: boolean };
+type Usuario = {
+  id: string;
+  tenant_id: string;
+  perfil: "admin" | "operador" | "leitura";
+  nome: string;
+  deve_trocar_senha: boolean;
+};
 
 type AuthContextType = {
   usuario: Usuario | null;
@@ -38,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: payload.sub,
         tenant_id: payload.tenant_id,
         perfil: payload.perfil,
+        nome: typeof payload.nome === "string" ? payload.nome : "",
         deve_trocar_senha: Boolean(payload.deve_trocar_senha),
       });
       router.push(payload.deve_trocar_senha ? "/trocar-senha" : "/");

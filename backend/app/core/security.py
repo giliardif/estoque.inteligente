@@ -78,16 +78,20 @@ class TokenPayload(BaseModel):
     sub: str          # user_id
     tenant_id: str     # escopo de tenant obrigatório em todo token
     perfil: str         # admin | operador | leitura
+    nome: str = ""
     deve_trocar_senha: bool = False
     exp: datetime
 
 
-def create_access_token(user_id: UUID, tenant_id: UUID, perfil: str, deve_trocar_senha: bool = False) -> str:
+def create_access_token(
+    user_id: UUID, tenant_id: UUID, perfil: str, nome: str = "", deve_trocar_senha: bool = False
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user_id),
         "tenant_id": str(tenant_id),
         "perfil": perfil,
+        "nome": nome,
         "deve_trocar_senha": deve_trocar_senha,
         "exp": expire,
     }
@@ -110,11 +114,14 @@ class CurrentUser(BaseModel):
     id: UUID
     tenant_id: UUID
     perfil: str
+    nome: str = ""
 
 
 def get_current_user(token: str = Depends(oauth2_scheme)) -> CurrentUser:
     payload = decode_token(token)
-    return CurrentUser(id=UUID(payload.sub), tenant_id=UUID(payload.tenant_id), perfil=payload.perfil)
+    return CurrentUser(
+        id=UUID(payload.sub), tenant_id=UUID(payload.tenant_id), perfil=payload.perfil, nome=payload.nome
+    )
 
 
 def require_perfil(*perfis_permitidos: str):

@@ -2238,3 +2238,43 @@ usado só em `test_auth.py`/`conftest.py` para criar tenants de teste,
 sem nenhuma tela no frontend. Não é a base do onboarding público (não
 tem os campos decididos), mas existe e pode aparecer em auditorias de
 segurança futuras — vale ter isso mapeado.
+
+
+## Etapa 28 — Nome do usuário na saudação do Painel Home
+
+Gap registrado desde a Etapa 23: a saudação do Painel ("Bom dia.",
+"Boa tarde.", "Boa noite.") nunca incluiu o nome de quem está logado,
+porque `CurrentUser`/o payload do JWT não expunham `nome` — só
+`sub` (id), `tenant_id` e `perfil`. Fechado nesta etapa seguindo o
+mesmo padrão já usado para `deve_trocar_senha` (Etapa 27): o backend
+passa a incluir `nome` no JWT em vez de criar um endpoint dedicado,
+já que o frontend já decodifica o token no client para exibir dados
+de conveniência (nunca para autorização — isso continua só no
+backend a cada request).
+
+Backend: `TokenPayload` e `create_access_token()` (`app/core/security.py`)
+ganharam o campo `nome`; os dois pontos que emitem token
+(`login()` e `renovar_token()` em `app/modules/auth/service.py`) agora
+passam `user.nome`. `CurrentUser` também ganhou `nome`, propagado em
+`get_current_user()` — disponível para qualquer endpoint que precisar
+no futuro, sem precisar de nova consulta ao banco.
+
+Frontend: `lib/auth-context.tsx` decodifica `nome` do JWT junto com os
+demais campos e guarda no estado `usuario`. A saudação do Painel
+(`app/(dashboard)/page.tsx`) passa a exibir "Bom dia, {primeiro nome}."
+— usa só o primeiro nome (split por espaço) para não ocupar linha
+demais no card; sem posse de nome (usuário legado logado antes desta
+etapa, cujo token antigo ainda não tem o campo) cai de volta para o
+texto original sem nome, sem quebrar.
+
+Verificação: 204/204 testes (Postgres 16 local, roles restritos,
+incluindo `test_auth.py` isolado — comportamento intermitente já
+documentado, não é regressão), Bandit 0, `tsc --noEmit` e `next build`
+limpos. Mudança é texto simples dentro de um componente já existente
+(não altera layout/estrutura visual), então não passou pelo fluxo de
+preview HTML de mudança visual — só o texto da saudação muda.
+
+Nota: usuários com sessão ativa antes deste deploy (token antigo em
+memória ou refresh pendente) só verão o nome na saudação depois do
+próximo login — o token antigo não carrega o campo `nome`. Não é bug,
+é esperado, já que o token é opaco até ser reemitido.

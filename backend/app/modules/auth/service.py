@@ -86,7 +86,11 @@ async def login(db: AsyncSession, dados: LoginInput) -> tuple[str, str]:
     await db.commit()
 
     access_token = create_access_token(
-        user_id=user.id, tenant_id=user.tenant_id, perfil=user.perfil, deve_trocar_senha=user.deve_trocar_senha
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        perfil=user.perfil,
+        nome=user.nome,
+        deve_trocar_senha=user.deve_trocar_senha,
     )
     refresh_bruto = await _emitir_refresh_token(db, user)
     return access_token, refresh_bruto
@@ -138,7 +142,11 @@ async def renovar_token(db: AsyncSession, refresh_token_bruto: str) -> tuple[str
     await db.commit()
 
     access_token = create_access_token(
-        user_id=user.id, tenant_id=user.tenant_id, perfil=user.perfil, deve_trocar_senha=user.deve_trocar_senha
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        perfil=user.perfil,
+        nome=user.nome,
+        deve_trocar_senha=user.deve_trocar_senha,
     )
     novo_refresh = await _emitir_refresh_token(db, user)
     return access_token, novo_refresh
