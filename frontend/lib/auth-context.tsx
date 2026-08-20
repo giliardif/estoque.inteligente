@@ -4,13 +4,14 @@ import { createContext, useContext, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, definirAccessToken } from "@/lib/api";
 
-type Usuario = { id: string; tenant_id: string; perfil: "admin" | "operador" | "leitura" };
+type Usuario = { id: string; tenant_id: string; perfil: "admin" | "operador" | "leitura"; deve_trocar_senha: boolean };
 
 type AuthContextType = {
   usuario: Usuario | null;
   carregando: boolean;
   login: (email: string, senha: string) => Promise<void>;
   logout: () => Promise<void>;
+  marcarSenhaTrocada: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -33,11 +34,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // requisição; o frontend nunca confia no conteúdo decodificado para
       // decisões de autorização, só para conveniência de exibição.
       const payload = JSON.parse(atob(resp.access_token.split(".")[1]));
-      setUsuario({ id: payload.sub, tenant_id: payload.tenant_id, perfil: payload.perfil });
-      router.push("/");
+      setUsuario({
+        id: payload.sub,
+        tenant_id: payload.tenant_id,
+        perfil: payload.perfil,
+        deve_trocar_senha: Boolean(payload.deve_trocar_senha),
+      });
+      router.push(payload.deve_trocar_senha ? "/trocar-senha" : "/");
     } finally {
       setCarregando(false);
     }
+  }
+
+  function marcarSenhaTrocada() {
+    setUsuario((atual) => (atual ? { ...atual, deve_trocar_senha: false } : atual));
   }
 
   async function logout() {
@@ -48,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, carregando, login, logout }}>
+    <AuthContext.Provider value={{ usuario, carregando, login, logout, marcarSenhaTrocada }}>
       {children}
     </AuthContext.Provider>
   );

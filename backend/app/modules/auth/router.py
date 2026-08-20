@@ -6,7 +6,7 @@ from app.core.database import get_db_auth
 from app.core.rate_limit import limiter
 from app.core.security import CurrentUser, get_current_user
 from app.modules.auth import service
-from app.modules.auth.schemas import AccessTokenOut, LoginInput, RegistrarTenantInput
+from app.modules.auth.schemas import AccessTokenOut, LoginInput, RegistrarTenantInput, TrocarSenhaInput
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -53,6 +53,15 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
     access_token, novo_refresh = await service.renovar_token(db, refresh_token_bruto)
     _set_refresh_cookie(response, novo_refresh)
     return AccessTokenOut(access_token=access_token)
+
+
+@router.post("/trocar-senha", status_code=204)
+async def trocar_senha(
+    payload: TrocarSenhaInput,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_auth),
+):
+    await service.trocar_senha(db, user_id=user.id, dados=payload)
 
 
 @router.post("/logout", status_code=204)

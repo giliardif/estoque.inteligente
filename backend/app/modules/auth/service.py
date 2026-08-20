@@ -24,7 +24,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.models import RefreshToken, Tenant, User
-from app.modules.auth.schemas import LoginInput, RegistrarTenantInput
+from app.modules.auth.schemas import LoginInput, RegistrarTenantInput, TrocarSenhaInput
 
 MAX_TENTATIVAS = 5
 BLOQUEIO_MINUTOS = 15
@@ -85,7 +85,9 @@ async def login(db: AsyncSession, dados: LoginInput) -> tuple[str, str]:
     user.bloqueado_ate = None
     await db.commit()
 
-    access_token = create_access_token(user_id=user.id, tenant_id=user.tenant_id, perfil=user.perfil)
+    access_token = create_access_token(
+        user_id=user.id, tenant_id=user.tenant_id, perfil=user.perfil, deve_trocar_senha=user.deve_trocar_senha
+    )
     refresh_bruto = await _emitir_refresh_token(db, user)
     return access_token, refresh_bruto
 
@@ -135,9 +137,29 @@ async def renovar_token(db: AsyncSession, refresh_token_bruto: str) -> tuple[str
     registro_valido.revogado = True
     await db.commit()
 
-    access_token = create_access_token(user_id=user.id, tenant_id=user.tenant_id, perfil=user.perfil)
+    access_token = create_access_token(
+        user_id=user.id, tenant_id=user.tenant_id, perfil=user.perfil, deve_trocar_senha=user.deve_trocar_senha
+    )
     novo_refresh = await _emitir_refresh_token(db, user)
     return access_token, novo_refresh
+
+
+async def trocar_senha(db: AsyncSession, *, user_id: UUID, dados: TrocarSenhaInput) -> None:
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado.")
+
+    if not verify_password(dados.senha_atual, user.senha_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Senha atual incorreta.")
+
+    user.senha_hash = hash_password(dados.senha_nova)
+    user.deve_trocar_senha = False
+    await db.commit()
+
+    # Troca de senha revoga todas as sessões existentes (mesma lógica de
+    # "roubo suspeito" do refresh token) — força novo login com a senha nova,
+    # inclusive em outros dispositivos onde a sessão antiga estivesse aberta.
+    await revogar_todos_tokens(db, user_id)
 
 
 async def revogar_todos_tokens(db: AsyncSession, user_id: UUID) -> None:

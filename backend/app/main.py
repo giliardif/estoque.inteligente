@@ -15,6 +15,7 @@ from app.modules.inventario.router import router as inventario_router
 from app.modules.notas_fiscais.router import router as notas_fiscais_router
 from app.modules.painel.router import router as painel_router
 from app.modules.produtos.router import router as produtos_router
+from app.modules.usuarios.router import router as usuarios_router
 from app.modules.vendas.router import router as vendas_router
 
 settings = get_settings()
@@ -57,6 +58,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(produtos_router, prefix="/api/v1")
+app.include_router(usuarios_router, prefix="/api/v1")
 app.include_router(cadastros_router, prefix="/api/v1")
 app.include_router(estoque_router, prefix="/api/v1")
 app.include_router(inventario_router, prefix="/api/v1")

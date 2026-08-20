@@ -36,6 +36,7 @@ class User(Base):
     senha_hash: Mapped[str] = mapped_column(Text)
     perfil: Mapped[str] = mapped_column(String(20))  # admin | operador | leitura
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    deve_trocar_senha: Mapped[bool] = mapped_column(Boolean, default=False)
     tentativas_falhas: Mapped[int] = mapped_column(default=0)
     bloqueado_ate: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

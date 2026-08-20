@@ -389,3 +389,19 @@ export type PainelGeral = {
   ultimas_movimentacoes: MovimentacaoRecente[];
   alertas: AlertasResumo;
 };
+
+export type Perfil = "admin" | "operador" | "leitura";
+
+export type Usuario = {
+  id: string;
+  nome: string;
+  email: string;
+  perfil: Perfil;
+  ativo: boolean;
+  criado_em: string;
+};
+
+export type UsuarioCreateResult = {
+  usuario: Usuario;
+  senha_provisoria: string;
+};

@@ -9,7 +9,7 @@ import { useTheme } from "@/lib/theme/useTheme";
 import ToggleTema from "@/components/ui/ToggleTema";
 import {
   LayoutGrid, Package, Boxes, ArrowLeftRight, ClipboardList, FileText,
-  BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X,
+  BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X, Users,
 } from "lucide-react";
 
 const nav = [
@@ -24,6 +24,11 @@ const nav = [
   { href: "/alertas", label: "Alertas", icon: Bell },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
 ];
+
+// Item exibido só para admin — a proteção real é o backend (403 para
+// operador/leitura), este filtro é só para não anunciar uma tela que o
+// usuário não tem permissão de usar.
+const navAdmin = { href: "/usuarios", label: "Usuários", icon: Users };
 
 function LogoBloco({ tema }: { tema: ReturnType<typeof useTheme> }) {
   return (
@@ -49,10 +54,10 @@ function LogoBloco({ tema }: { tema: ReturnType<typeof useTheme> }) {
   );
 }
 
-function NavLista({ pathname, onNavegar }: { pathname: string | null; onNavegar?: () => void }) {
+function NavLista({ pathname, onNavegar, itens }: { pathname: string | null; onNavegar?: () => void; itens: typeof nav }) {
   return (
     <nav className="flex flex-col gap-0.5">
-      {nav.map((item) => {
+      {itens.map((item) => {
         const ativo = item.href === "/" ? pathname === "/" : pathname?.startsWith(item.href);
         return (
           <Link
@@ -86,7 +91,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     // Proteção de rota no client: se não há usuário autenticado em memória,
     // volta pro login. A proteção REAL (que importa de verdade) é o backend
     // recusar qualquer chamada sem token válido — isto aqui é só UX.
-    if (!usuario) router.replace("/login");
+    if (!usuario) {
+      router.replace("/login");
+    } else if (usuario.deve_trocar_senha) {
+      // Senha provisória (convite) ainda não foi trocada — bloqueia navegação
+      // para qualquer outra tela do dashboard até a troca ser concluída.
+      router.replace("/trocar-senha");
+    }
   }, [usuario, router]);
 
   // Fecha o menu mobile automaticamente ao trocar de rota.
@@ -95,6 +106,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   if (!usuario) return null;
+
+  const itensNav = usuario.perfil === "admin" ? [...nav, navAdmin] : nav;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -121,7 +134,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)" }}
       >
         <LogoBloco tema={tema} />
-        <NavLista pathname={pathname} />
+        <NavLista pathname={pathname} itens={itensNav} />
         <div className="mt-auto flex flex-col gap-2">
           <ToggleTema />
           <button
@@ -155,7 +168,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 <X size={20} />
               </button>
             </div>
-            <NavLista pathname={pathname} onNavegar={() => setMenuAberto(false)} />
+            <NavLista pathname={pathname} onNavegar={() => setMenuAberto(false)} itens={itensNav} />
             <div className="mt-auto flex flex-col gap-2">
               <ToggleTema />
               <button

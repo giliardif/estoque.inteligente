@@ -2097,3 +2097,144 @@ suíte inteira falhou com `ConnectionRefusedError`. Não foi regressão:
 reiniciado o cluster (`pg_ctlcluster 16 main start`) na mesma chamada
 que rodou os testes, e a suíte voltou a passar 179/179 de forma limpa.
 
+
+## Etapa 27 — Convite e gestão de usuário (dentro do tenant)
+
+Escopo decidido com Giliardi antes de implementar: modelo de convite
+direto (admin cadastra nome/e-mail/perfil, backend gera senha
+provisória de alta entropia, exibida uma única vez na resposta —
+nunca fica recuperável depois, repassada pelo admin fora do sistema).
+Não depende de infraestrutura de e-mail, que ainda não existe no
+sistema (fica registrada no backlog "Email/WhatsApp notifications").
+Decisão consciente de manter os 3 perfis fixos (admin/operador/leitura)
+já existentes em vez de migrar para permissões granulares por
+módulo/ação — cobre bem o caso de uso de pequeno varejo com um único
+tenant ativo hoje, e granular só compensaria com uma necessidade real
+concreta (nenhuma identificada). Fica registrado como possível
+evolução futura, sem prazo.
+
+**Fora de escopo, tratado como backlog separado (registrado abaixo):**
+onboarding público de tenant novo (cadastro de empresa com CNPJ,
+telefone, endereço + seleção de segmento + admin fundador) — feature
+maior e distinta desta etapa, mockada para validação visual junto com
+esta, mas não implementada.
+
+**Migration 011** (`011_usuarios_convite.sql`): coluna
+`deve_trocar_senha` em `users`, default `false` — não afeta usuários
+existentes (ex: admin fundador do Doce Encanto).
+
+**Backend — módulo `usuarios`** (`schemas.py`, `service.py`,
+`router.py`):
+- `GET /usuarios` — lista usuários do tenant (admin e operador podem
+  ver; leitura recebe 403 — decisão: só quem pode agir sobre a equipe
+  precisa ver a equipe)
+- `POST /usuarios` — só admin. Recebe nome/e-mail/perfil, rejeita
+  e-mail duplicado (409) e perfil inválido (422). Gera senha
+  provisória (`gerar_senha_provisoria()` em `core/security.py`: 12
+  caracteres, garante maiúscula+minúscula+dígito, exclui caracteres
+  ambíguos I/O/l/0/1 por ser repassada manualmente) e marca
+  `deve_trocar_senha=True`
+- `PATCH /usuarios/{id}` — só admin. Atualiza perfil e/ou ativo
+  (parcial — 400 se nenhum campo enviado). Regra de auto-proteção: um
+  admin não pode rebaixar o próprio perfil nem se desativar (evita o
+  tenant ficar sem admin ativo por engano) — testado explicitamente.
+  Isolamento por tenant: editar usuário de outro tenant retorna 404
+  (não vaza existência)
+
+**Achado corrigido durante a etapa:** existia um schema
+`TrocarSenhaInput` em `auth/schemas.py` desde antes, sem router nem
+service implementados — nunca tinha sido ligado a nada. Necessário
+para fechar o fluxo desta etapa (usuário convidado precisa trocar a
+senha provisória no primeiro login), então foi implementado agora:
+`POST /auth/trocar-senha` (valida senha atual, aplica política de
+força na nova, zera `deve_trocar_senha`, e revoga todas as sessões
+ativas do usuário — mesmo efeito de "roubo suspeito" já usado no
+refresh token, força novo login em todos os dispositivos).
+
+`deve_trocar_senha` foi adicionado ao payload do JWT (`TokenPayload`)
+em vez de criar um endpoint separado só para consultar isso — o
+frontend já decodifica o JWT no client para exibir dados do usuário,
+então reaproveita o mesmo mecanismo. Propagado tanto no login quanto
+no refresh token.
+
+**Decisão de segurança registrada (não bloqueante, documentada aqui
+para não ser esquecida):** a obrigatoriedade de trocar a senha é
+aplicada apenas no frontend (redireciona para `/trocar-senha` e
+bloqueia navegação enquanto a flag estiver ativa) — o backend NÃO
+recusa chamadas de API de um usuário com `deve_trocar_senha=true` em
+outros endpoints. Um usuário com o JWT válido tecnicamente consegue
+usar a API normalmente sem trocar a senha primeiro, se contornar a
+UI. Isso não é uma brecha de autenticação (ainda precisa da senha
+provisória para logar), é uma lacuna de UX/política que fica
+registrada como possível endurecimento futuro (ex: middleware no
+backend bloqueando 90% das rotas até a troca) caso vire relevante.
+
+**Frontend:**
+- `lib/types.ts`: tipos `Perfil`, `Usuario`, `UsuarioCreateResult`
+- `lib/auth-context.tsx`: captura `deve_trocar_senha` do JWT
+  decodificado, redireciona para `/trocar-senha` no login quando
+  `true`; novo método `marcarSenhaTrocada()` para atualizar o estado
+  em memória sem precisar de novo login
+- `app/(dashboard)/layout.tsx`: bloqueio de navegação no client
+  enquanto `deve_trocar_senha` for `true` (redireciona qualquer rota
+  do dashboard para a tela de troca); item de menu "Usuários" exibido
+  apenas para perfil admin (proteção real continua sendo o 403 do
+  backend — isto é só para não anunciar uma tela sem permissão)
+- `app/trocar-senha/page.tsx`: tela de troca obrigatória, fora do
+  grupo de rotas `(dashboard)` (sem sidebar), mesmo padrão visual do
+  login
+- `app/(dashboard)/usuarios/page.tsx` +
+  `components/usuarios/ConvidarUsuarioDialog.tsx`: tela de gestão
+  (tabela com avatar/iniciais, badge de perfil, status ativo/inativo,
+  select inline de perfil para admin, confirmação antes de
+  desativar/reativar reaproveitando `ConfirmDialog` existente) e modal
+  de convite em duas etapas (formulário → resultado com a senha
+  provisória exibida uma única vez, com botão copiar). Operador vê a
+  lista em modo somente-leitura (sem select editável, sem botão
+  desativar, sem botão convidar) — evita expor controles que
+  resultariam em 403 ao serem usados
+- Segue exatamente o layout aprovado no preview HTML (sidebar fixa de
+  240px, mesmos tokens de cor/tipografia)
+
+**Verificação:** 204/204 testes passando (185 anteriores + 19 novos em
+`test_usuarios.py`, cobrindo permissão por perfil, duplicidade de
+e-mail, auto-proteção do admin, isolamento entre tenants na listagem e
+na edição, fluxo completo de senha provisória → login → troca →
+revogação de sessão antiga, rejeição de senha nova fraca) — inclui
+`test_auth.py` rodado isoladamente (comportamento intermitente já
+documentado, não é regressão). Bandit: 0 achados. `tsc --noEmit` e
+`next build` limpos, incluindo as novas rotas `/usuarios` e
+`/trocar-senha`.
+
+**Nota de processo:** o teste `test_admin_convida_usuario_com_sucesso`
+e outros de `test_usuarios.py` usavam e-mails fixos na primeira versão
+e falharam por `UniqueViolationError` ao rodar a suíte pela segunda vez
+sem recriar o banco entre execuções — corrigido usando o helper
+`_email_unico()` já existente em `conftest.py`, mesmo padrão do resto
+da suíte. Não chegou a ser entregue com esse problema, capturado e
+corrigido durante a própria verificação desta etapa.
+
+---
+
+## Backlog — Onboarding público de tenant (cadastro de conta nova)
+
+Registrado ao final da Etapa 27, fora do escopo dela: tela pública de
+"criar minha conta" — qualquer um cria um tenant novo no NexStock,
+diferente do convite (que é dentro de um tenant já existente).
+
+Decidido com Giliardi: fluxo de 3 passos — (1) seleção de segmento
+(mesmo que só confeitaria esteja implementada hoje, os outros
+aparecem como "em breve" — arquitetura já é multi-segmento via JSON de
+config); (2) dados completos da empresa (nome, CNPJ, telefone,
+endereço); (3) dados do admin fundador (nome, e-mail, senha) + resumo
+de confirmação. Mockado em HTML junto com a tela de convite de usuário
+para validação visual (aprovado), mas não implementado — vira etapa
+própria quando entrar na fila.
+
+Achado relacionado (não é bug, é FYI): já existe hoje um
+`POST /auth/register` cru no backend (`registrar_tenant`), sem CNPJ,
+telefone, endereço nem validação de segmento contra uma lista real —
+usado só em `test_auth.py`/`conftest.py` para criar tenants de teste,
+sem nenhuma tela no frontend. Não é a base do onboarding público (não
+tem os campos decididos), mas existe e pode aparecer em auditorias de
+segurança futuras — vale ter isso mapeado.

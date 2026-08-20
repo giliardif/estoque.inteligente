@@ -47,6 +47,25 @@ def gerar_refresh_token_bruto() -> str:
     return secrets.token_urlsafe(48)
 
 
+_SENHA_MAIUSC = "ABCDEFGHJKLMNPQRSTUVWXYZ"  # sem I/O — evita confusão visual ao repassar por fora
+_SENHA_MINUSC = "abcdefghijkmnpqrstuvwxyz"
+_SENHA_DIGITOS = "23456789"
+
+
+def gerar_senha_provisoria() -> str:
+    """Gera senha aleatória que satisfaz validar_forca_senha garantidamente
+    (mistura de maiúsculas/minúsculas + número), usada no convite de usuário.
+    Caracteres ambíguos (I, O, l, 0, 1) excluídos por ser repassada manualmente."""
+    alfabeto = _SENHA_MAIUSC + _SENHA_MINUSC + _SENHA_DIGITOS
+    while True:
+        candidata = "".join(secrets.choice(alfabeto) for _ in range(12))
+        tem_maiusc = any(c in _SENHA_MAIUSC for c in candidata)
+        tem_minusc = any(c in _SENHA_MINUSC for c in candidata)
+        tem_digito = any(c in _SENHA_DIGITOS for c in candidata)
+        if tem_maiusc and tem_minusc and tem_digito:
+            return candidata
+
+
 def hash_refresh_token(token_bruto: str) -> str:
     return pwd_context.hash(token_bruto)
 
@@ -59,12 +78,19 @@ class TokenPayload(BaseModel):
     sub: str          # user_id
     tenant_id: str     # escopo de tenant obrigatório em todo token
     perfil: str         # admin | operador | leitura
+    deve_trocar_senha: bool = False
     exp: datetime
 
 
-def create_access_token(user_id: UUID, tenant_id: UUID, perfil: str) -> str:
+def create_access_token(user_id: UUID, tenant_id: UUID, perfil: str, deve_trocar_senha: bool = False) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": str(user_id), "tenant_id": str(tenant_id), "perfil": perfil, "exp": expire}
+    payload = {
+        "sub": str(user_id),
+        "tenant_id": str(tenant_id),
+        "perfil": perfil,
+        "deve_trocar_senha": deve_trocar_senha,
+        "exp": expire,
+    }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 

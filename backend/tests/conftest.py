@@ -114,12 +114,22 @@ async def client_tenant_b():
         yield ac
 
 
+def _payload_do_token(client: AsyncClient) -> dict:
+    import base64
+    import json
+
+    token = client.headers["Authorization"].split(" ")[1]
+    return json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+
+
 async def _criar_usuario_direto_no_banco(tenant_id: str, perfil: str, senha: str) -> str:
     """
-    Não existe (ainda) endpoint de API para um admin convidar/criar outro
-    usuário (operador/leitura) dentro do mesmo tenant — só o cadastro inicial
-    de tenant+admin. Isso é uma lacuna de produto real, registrada no DEVLOG.
-    Para testar perfis restritos, o usuário é inserido direto no banco aqui.
+    Desde a Etapa 27 existe POST /api/v1/usuarios (convite real, só admin).
+    Esta fixture continua inserindo direto no banco — mais rápida para os
+    testes que só precisam de "existe um usuário com este perfil" sem
+    exercitar o fluxo de convite em si (que tem seus próprios testes em
+    test_usuarios.py). Evita todo teste de outros módulos depender de
+    dois passos (criar + logar) só para obter um client autenticado.
     """
     engine = create_async_engine(TEST_DB_URL)
     email = _email_unico(perfil)
