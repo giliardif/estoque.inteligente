@@ -2363,3 +2363,52 @@ processo, já que a Etapa 30 já mexe em frontend em cima desta base).
   quer imprimir direto na Zebra sem diálogo — nenhum navegador permite
   impressão direta sem instalar um agente local, por design de
   segurança (não é limitação do NexStock).
+
+
+## Etapa 30 — Scanner de código (câmera + leitor físico) em Vendas
+
+Segunda etapa do item de código de barras/QR, em cima da infraestrutura
+de backend da Etapa 29.
+
+**Implementado:**
+
+- `lib/useLeitorFisico.ts`: hook que detecta leitores HID (USB/Bluetooth)
+  em qualquer input focado, sem nenhuma API especial de hardware — o
+  aparelho se comporta como teclado pro navegador. Distingue leitura
+  física de digitação humana pelo intervalo entre teclas (<40ms entre
+  teclas = leitura; digitação humana normal é bem mais lenta) + Enter no
+  final + tamanho mínimo do buffer (evita disparar em Enter isolado de
+  outros usos do campo). Reutilizável em qualquer tela sem alterar o
+  comportamento existente do campo onde é aplicado.
+- `components/scanner/ScannerCodigo.tsx`: modal de câmera reutilizável,
+  usando `@zxing/browser` (decodifica barras E QR do stream de vídeo,
+  bundlado — sem dependência de CDN externo em runtime). Fallback de
+  digitação manual sempre disponível (câmera indisponível, sem permissão,
+  ou contexto sem HTTPS). Chama `GET /produtos/buscar-codigo` e devolve o
+  produto encontrado via callback.
+- Aplicado em Vendas: botão "Escanear" ao lado da busca abre o modal de
+  câmera; o campo de busca existente ganhou detecção de leitor físico via
+  `useLeitorFisico` — bipar com o leitor adiciona direto no carrinho, sem
+  interferir na digitação manual (filtro por nome continua idêntico).
+
+**Decisão de escopo confirmada com o usuário durante o design:** leitor
+físico e câmera coexistem no mesmo campo sem escolha explícita do
+usuário — cada um resolve automaticamente conforme o tipo de entrada.
+
+**Verificação:** `tsc --noEmit` e `next build` limpos (rota `/vendas`
+7.87 kB). Suíte de backend re-rodada por completude (212/212 + 6 de
+test_auth.py isolados) — sem mudança de backend nesta etapa, mas nada
+regrediu. Bandit 0 issues.
+
+**Nota sobre verificação visual:** tentei gerar um screenshot real via
+Playwright/Chromium headless antes do push (padrão da casa pra mudanças
+visuais), mas o sandbox bloqueia os domínios necessários para baixar um
+navegador headless (`cdn.playwright.dev`, snap store do Ubuntu). Mesmo
+que funcionasse, não validaria a câmera de verdade (headless não tem
+webcam). Decisão tomada com o usuário: publicar direto na `staging` —
+o Vercel já faz deploy automático dela — e ele testa a câmera real lá,
+o que é estritamente melhor do que um screenshot estático.
+
+**Próxima:** Etapa 31 — scanner em Estoque e Inventário, com os dois
+modos de contagem (rolar até a linha / fila de cartões) definidos no
+preview.

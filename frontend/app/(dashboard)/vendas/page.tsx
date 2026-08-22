@@ -7,6 +7,8 @@ import {
   useToast, ConfirmDialog, TableSkeletonRows, Pagination, ThOrdenavel, TrHover,
   useSelecaoMultipla, BulkActionBar, RowMenu, useDebouncedValue, useKeyboardShortcuts,
 } from "@/components/ui";
+import { ScannerCodigo } from "@/components/scanner/ScannerCodigo";
+import { useLeitorFisico } from "@/lib/useLeitorFisico";
 import { Minus, Plus, ScanBarcode, Trash2, Eye, Ban, Download, Search } from "lucide-react";
 
 type ItemCarrinho = { produto_id: string; nome: string; quantidade: number; preco_unitario: number };
@@ -27,6 +29,7 @@ export default function VendasPage() {
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [finalizando, setFinalizando] = useState(false);
+  const [scannerAberto, setScannerAberto] = useState(false);
   const buscaProdutoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -54,6 +57,27 @@ export default function VendasPage() {
   function remover(produtoId: string) {
     setCarrinho((atual) => atual.filter((i) => i.produto_id !== produtoId));
   }
+
+  // --- Scanner ----------------------------------------------------------
+  // Leitor físico (HID) funciona no mesmo campo de busca, sem UI extra: o
+  // hook detecta o padrão de digitação rápida + Enter e resolve pro
+  // produto certo, sem interferir na digitação humana normal (filtro por
+  // nome continua igual). A câmera usa o modal ScannerCodigo à parte.
+  const buscarEAdicionarPorCodigo = useCallback(async (codigo: string) => {
+    try {
+      const produto = await apiFetch<Produto>(`/produtos/buscar-codigo?codigo=${encodeURIComponent(codigo)}`);
+      adicionarAoCarrinho(produto);
+      setBuscaProduto("");
+      sucesso(`${produto.nome} adicionado ao carrinho.`);
+    } catch (err) {
+      const msg = err instanceof ApiError && err.status === 404
+        ? "Nenhum produto encontrado para esse código."
+        : "Não foi possível buscar o produto.";
+      toastErro(msg);
+    }
+  }, [sucesso, toastErro]);
+
+  useLeitorFisico(buscarEAdicionarPorCodigo);
 
   async function finalizarVenda() {
     setErro(null);
@@ -217,15 +241,24 @@ export default function VendasPage() {
 
       <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-2">
         <div className="rounded-xl border p-5" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
-          <div className="flex items-center gap-2 rounded-md border px-3 py-2 mb-3" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-base)" }}>
-            <ScanBarcode size={15} style={{ color: "var(--cor-acento)" }} />
-            <input
-              ref={buscaProdutoRef}
-              value={buscaProduto}
-              onChange={(e) => setBuscaProduto(e.target.value)}
-              placeholder="Buscar produto por nome  (/)"
-              className="bg-transparent outline-none text-sm w-full"
-            />
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2 flex-1" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-base)" }}>
+              <ScanBarcode size={15} style={{ color: "var(--cor-acento)" }} />
+              <input
+                ref={buscaProdutoRef}
+                value={buscaProduto}
+                onChange={(e) => setBuscaProduto(e.target.value)}
+                placeholder="Buscar produto por nome  (/)"
+                className="bg-transparent outline-none text-sm w-full"
+              />
+            </div>
+            <button
+              onClick={() => setScannerAberto(true)}
+              className="flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold shrink-0"
+              style={{ background: "var(--cor-acento)", color: "#06231a" }}
+            >
+              <ScanBarcode size={14} /> Escanear
+            </button>
           </div>
           <div className="flex flex-col gap-1 max-h-80 overflow-y-auto">
             {produtosFiltrados.map((p) => (
@@ -550,6 +583,15 @@ export default function VendasPage() {
         confirmando={cancelando}
         onConfirmar={confirmarCancelamento}
         onCancelar={() => setVendaParaCancelar(null)}
+      />
+
+      <ScannerCodigo
+        aberto={scannerAberto}
+        onFechar={() => setScannerAberto(false)}
+        onProdutoEncontrado={(produto) => {
+          adicionarAoCarrinho(produto);
+          sucesso(`${produto.nome} adicionado ao carrinho.`);
+        }}
       />
     </div>
   );
