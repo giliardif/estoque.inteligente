@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { EtiquetaConfig, EtiquetaModelo, Produto } from "@/lib/types";
 import { useToast } from "@/components/ui";
 import { EtiquetaLabel } from "@/components/etiquetas/EtiquetaLabel";
-import { Search, X, Save, Printer, FileDown, ScanBarcode } from "lucide-react";
+import { Search, X, Save, Printer, FileDown, ScanBarcode, Download } from "lucide-react";
 import { ScannerCodigo } from "@/components/scanner/ScannerCodigo";
+import { useQzTray } from "@/lib/useQzTray";
 
 const CONFIG_PADRAO: EtiquetaConfig = {
   elementos: { nome: true, sku: true, preco: true, marca: false },
@@ -30,6 +31,9 @@ export default function EtiquetasPage() {
   const [scannerAberto, setScannerAberto] = useState(false);
 
   const [config, setConfig] = useState<EtiquetaConfig>(CONFIG_PADRAO);
+  const { status: statusQzTray, impressoras: impressorasQzTray, conectar: reconectarQzTray, imprimirHtml } = useQzTray();
+  const gradeImpressaoRef = useRef<HTMLDivElement>(null);
+  const [imprimindo, setImprimindo] = useState(false);
 
   const [modelos, setModelos] = useState<EtiquetaModelo[]>([]);
   const [modeloSelecionadoId, setModeloSelecionadoId] = useState<string>("");
@@ -112,7 +116,25 @@ export default function EtiquetasPage() {
 
   function imprimir() {
     if (config.modoImpressao === "qztray") {
-      toastErro("Integração com QZ Tray ainda não disponível — usando impressão pelo navegador por enquanto.");
+      if (statusQzTray !== "conectado") {
+        toastErro("QZ Tray não está conectado — imprimindo pelo navegador.");
+        window.print();
+        return;
+      }
+      if (!config.impressora) {
+        toastErro("Escolha uma impressora antes de imprimir.");
+        return;
+      }
+      setImprimindo(true);
+      const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+        body{margin:0;font-family:Manrope,Arial,sans-serif;}
+        .grade{display:grid;grid-template-columns:repeat(${config.colunas},1fr);gap:${config.espacamentoMm}mm;padding:${config.margemMm}mm;}
+      </style></head><body><div class="grade">${gradeImpressaoRef.current?.innerHTML ?? ""}</div></body></html>`;
+      imprimirHtml(html, config.impressora)
+        .then(() => sucesso("Enviado pra impressora."))
+        .catch(() => toastErro("Não foi possível imprimir via QZ Tray. Confirme se o agente está aberto."))
+        .finally(() => setImprimindo(false));
+      return;
     }
     window.print();
   }
@@ -312,12 +334,78 @@ export default function EtiquetasPage() {
                 </button>
               ))}
             </div>
-            {config.modoImpressao === "qztray" && (
+
+            {config.modoImpressao === "navegador" && (
               <p className="text-[10.5px] mt-1.5" style={{ color: "var(--cor-texto-muted)" }}>
-                Integração com QZ Tray chega numa próxima etapa — por enquanto, imprime pelo navegador mesmo com esse modo selecionado.
+                Abre o diálogo de impressão padrão do sistema — funciona sem instalar nada.
               </p>
             )}
+
+            {config.modoImpressao === "qztray" && (
+              <div className="mt-2 rounded-md border p-2.5" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-base)" }}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{
+                      background: statusQzTray === "conectado" ? "var(--cor-acento)"
+                        : statusQzTray === "conectando" ? "#F59E0B" : "var(--cor-alerta)",
+                    }}
+                  />
+                  <span className="text-xs font-semibold">
+                    {statusQzTray === "conectado" && "QZ Tray conectado"}
+                    {statusQzTray === "conectando" && "Conectando..."}
+                    {statusQzTray === "desconectado" && "QZ Tray desconectado"}
+                    {statusQzTray === "indisponivel" && "QZ Tray não encontrado"}
+                  </span>
+                </div>
+
+                {statusQzTray === "conectado" ? (
+                  <p className="text-[10.5px]" style={{ color: "var(--cor-texto-muted)" }}>
+                    Imprime direto na impressora, sem abrir diálogo nenhum.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[10.5px] mb-1.5" style={{ color: "var(--cor-texto-muted)" }}>
+                      Requer instalar o agente local uma vez neste computador.
+                    </p>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={reconectarQzTray}
+                        className="flex-1 rounded-md border py-1.5 text-[10.5px] font-semibold"
+                        style={{ borderColor: "var(--cor-borda)" }}
+                      >
+                        Tentar conectar de novo
+                      </button>
+                      <a
+                        href="https://qz.io/download/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 flex items-center justify-center gap-1 rounded-md py-1.5 text-[10.5px] font-semibold"
+                        style={{ background: "var(--cor-acento)", color: "#06231a" }}
+                      >
+                        <Download size={11} /> Baixar QZ Tray
+                      </a>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
+
+          {config.modoImpressao === "qztray" && statusQzTray === "conectado" && (
+            <div className="mb-3">
+              <label className="text-xs font-semibold block mb-1.5" style={{ color: "var(--cor-texto-muted)" }}>Impressora</label>
+              <select
+                value={config.impressora}
+                onChange={(e) => setConfig((c) => ({ ...c, impressora: e.target.value }))}
+                className="w-full rounded-md border px-2 py-1.5 text-xs outline-none"
+                style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
+              >
+                <option value="">Selecione...</option>
+                {impressorasQzTray.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
+              </select>
+            </div>
+          )}
 
           <div className="flex gap-1.5 mt-4">
             <input
@@ -377,12 +465,12 @@ export default function EtiquetasPage() {
               <FileDown size={13} /> Gerar PDF
             </button>
             <button
-              disabled={grade.length === 0}
+              disabled={grade.length === 0 || imprimindo}
               onClick={imprimir}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-md py-2 text-xs font-bold disabled:opacity-50"
               style={{ background: "var(--cor-acento)", color: "#06231a" }}
             >
-              <Printer size={13} /> Imprimir etiquetas
+              <Printer size={13} /> {imprimindo ? "Imprimindo..." : "Imprimir etiquetas"}
             </button>
           </div>
         </div>
@@ -391,6 +479,7 @@ export default function EtiquetasPage() {
       {/* Grade real de impressão — só visível no @media print (ver <style> acima) */}
       <div
         id="grade-impressao"
+        ref={gradeImpressaoRef}
         className="hidden print:grid gap-2"
         style={{ gridTemplateColumns: `repeat(${config.colunas}, 1fr)`, gap: `${config.espacamentoMm}mm` }}
       >

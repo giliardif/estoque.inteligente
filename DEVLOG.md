@@ -2505,3 +2505,65 @@ diálogo de impressão do navegador).
 
 **Próxima:** Etapa 33 — integração QZ Tray (impressão direta na Zebra,
 sem diálogo do navegador).
+
+
+## Etapa 33 — Integração QZ Tray (impressão direta, sem diálogo)
+
+Quinta e última etapa planejada do item de código de barras/QR. Fecha
+o modo de impressão avançado que já existia como placeholder estático
+na Etapa 32.
+
+**Implementado:**
+
+- `lib/useQzTray.ts`: hook que tenta conectar no QZ Tray (agente local,
+  websocket) ao montar a tela, expõe status real (`conectando` /
+  `conectado` / `indisponivel`) e a lista de impressoras registradas no
+  SO quando conectado.
+- `lib/qz-tray.d.ts`: declaração de tipos mínima pro pacote `qz-tray`
+  (não distribui `.d.ts` — só cobre a superfície de API usada:
+  `websocket`, `printers`, `configs`, `print`, `security`).
+- Impressão via modo **pixel/html**: em vez de gerar ZPL manualmente,
+  QZ Tray renderiza o HTML da grade de etiquetas e manda pro driver da
+  impressora já instalada no SO — funciona pra qualquer impressora
+  registrada (inclui Zebra/Elgin via driver), sem diálogo de impressão
+  do navegador.
+- Tela Etiquetas: bolinha de status (verde/amarelo/vermelho) e lista de
+  impressoras agora refletem a conexão real, não mais estático. Botões
+  "Tentar conectar de novo" e "Baixar QZ Tray" (link pra qz.io/download)
+  aparecem quando desconectado. "Imprimir etiquetas" detecta o modo
+  ativo e manda pro QZ Tray ou cai pro navegador automaticamente se o
+  QZ Tray não estiver disponível.
+
+**Limitação conhecida, documentada e não bloqueante:** o HTML enviado
+pro QZ Tray é o `innerHTML` da grade — funciona perfeitamente pro
+código de barras (SVG, serializa normal), mas o QR Code é desenhado em
+`<canvas>` (biblioteca `qrcode`), e conteúdo de canvas não serializa
+via `innerHTML` — o QR sai em branco na impressão via QZ Tray
+especificamente (impressão pelo navegador continua perfeita pros dois,
+porque usa o DOM ao vivo, não uma string HTML). Enquanto isso não for
+corrigido (converter o canvas pra `<img>` com data URL antes de montar
+o HTML de impressão), recomendação prática: usar tipo "Barras" quando
+o modo de impressão for QZ Tray.
+
+**Nota sobre certificado:** sem certificado digital assinado
+configurado, o QZ Tray mostra um popup de confirmação de segurança na
+primeira impressão de cada sessão — funcional, mas não 100% silencioso.
+Configurar certificado próprio é next-step, não bloqueia o uso.
+
+**Verificação:** `tsc --noEmit` e `next build` limpos (`/etiquetas`
+31.3 kB, +1.1kB pela lib `qz-tray`). Suíte de backend reconfirmada
+(212/212 + 6 isolados), Bandit 0 — sem mudança de backend nesta etapa.
+
+---
+
+Com a Etapa 33, o item de backlog "Barcode/QR via câmera" está
+completo em todas as frentes desenhadas no preview original: scanner
+por câmera e leitor físico em Vendas/Estoque/Inventário (dois modos de
+contagem), tela de Etiquetas em lote com modelos salvos, e impressão
+tanto pelo navegador quanto direto via QZ Tray.
+
+**Pendências que ficam pro backlog geral** (não bloqueiam o item, só
+não foram feitas ainda): ícone de "gerar etiqueta rápida" na linha de
+Produto (caso de uso de 1 produto só); corrigir serialização do QR no
+print via QZ Tray; certificado QZ Tray assinado; exportação de PDF
+standalone sem depender do diálogo do navegador.
