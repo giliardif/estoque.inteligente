@@ -82,6 +82,22 @@ async def confirmar_importacao_produtos(
     return await service.confirmar_importacao(db, tenant_id=user.tenant_id, linhas=payload.linhas)
 
 
+@router.get("/buscar-codigo", response_model=ProdutoOut)
+async def buscar_produto_por_codigo(
+    codigo: str = Query(min_length=1, max_length=64),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    # Usado pelo scanner (câmera ou leitor físico) em Vendas/Estoque/
+    # Inventário: recebe o código lido bruto e resolve pro produto exato via
+    # codigo_barras OU sku (mesma dupla usada na busca unificada de listar(),
+    # mas aqui exigindo igualdade exata — ver rationale em service.buscar_por_codigo).
+    produto = await service.buscar_por_codigo(db, tenant_id=user.tenant_id, codigo=codigo)
+    if not produto:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nenhum produto encontrado para esse código.")
+    return produto
+
+
 @router.get("/{produto_id}", response_model=ProdutoOut)
 async def obter_produto(
     produto_id: UUID,

@@ -244,3 +244,13 @@ class PedidoCompraItem(Base):
     quantidade_recebida: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
 
     pedido: Mapped["PedidoCompra"] = relationship(back_populates="itens")
+
+
+class EtiquetaModelo(Base):
+    __tablename__ = "etiqueta_modelos"
+    id: Mapped[uuid.UUID] = _uuid_col()
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"))
+    nome: Mapped[str] = mapped_column(String(120))
+    config_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

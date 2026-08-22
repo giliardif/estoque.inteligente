@@ -43,6 +43,20 @@ async def obter(db: AsyncSession, *, tenant_id: UUID, produto_id: UUID):
     return result.scalar_one_or_none()
 
 
+async def buscar_por_codigo(db: AsyncSession, *, tenant_id: UUID, codigo: str):
+    # Match exato (não substring, diferente da busca unificada de listar()):
+    # a leitura de um scanner/leitor físico é sempre um código completo e
+    # inequívoco — retornar por substring aqui poderia casar com o produto
+    # errado quando um código é prefixo/sufixo de outro.
+    stmt = select(Produto).where(
+        Produto.tenant_id == tenant_id,
+        Produto.ativo.is_(True),
+        or_(Produto.codigo_barras == codigo, Produto.sku == codigo),
+    )
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
 async def criar(db: AsyncSession, *, tenant_id: UUID, dados: ProdutoCreate):
     produto = Produto(tenant_id=tenant_id, **dados.model_dump())
     db.add(produto)

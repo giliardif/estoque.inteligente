@@ -2278,3 +2278,88 @@ Nota: usuários com sessão ativa antes deste deploy (token antigo em
 memória ou refresh pendente) só verão o nome na saudação depois do
 próximo login — o token antigo não carrega o campo `nome`. Não é bug,
 é esperado, já que o token é opaco até ser reemitido.
+
+
+## Etapa 29 — Infraestrutura de código de barras/QR: busca por código e modelos de etiqueta
+
+Primeira etapa de um item de backlog maior ("Barcode/QR via câmera"),
+agora com escopo bem mais amplo do que o registrado originalmente:
+scanner (câmera + leitor físico HID) em Vendas/Estoque/Inventário e
+geração/impressão de etiquetas em lote com modelos salvos. Dado o
+tamanho, o trabalho foi dividido em etapas — esta cobre só a
+infraestrutura de backend da qual as próximas dependem:
+
+- Etapa 29 (esta): busca por código + CRUD de modelos de etiqueta
+- Etapa 30: componente de scanner (câmera + leitor físico) em Vendas
+- Etapa 31: scanner em Estoque e Inventário (dois modos de contagem —
+  decisão do usuário foi manter ambos, com abas)
+- Etapa 32: tela Etiquetas completa (frontend)
+- Etapa 33: integração QZ Tray (impressão direta em impressora térmica,
+  sem diálogo do navegador — modo avançado opcional; navegador continua
+  sendo o padrão)
+
+Todo o escopo foi fechado com o usuário através de um preview HTML
+interativo (câmera simulada com moldura de foco, os dois modos de
+Inventário lado a lado em abas, tela de Etiquetas com preview ao vivo
+usando JsBarcode/QRCode.js reais) antes de qualquer linha de código
+real — mesmo padrão de prototype → aprovação → implementação já
+estabelecido desde a Etapa 23.
+
+**Descoberta na varredura de código**: `produtos.codigo_barras` já
+existe desde a migration 001 (indexado, sem unique constraint) e já é
+usado na busca unificada (`ILIKE` por nome/sku/código, todos no mesmo
+campo de busca). Não foi preciso nenhuma migration nova em produtos —
+só uma migration nova pra modelos de etiqueta.
+
+**Backend implementado nesta etapa:**
+
+- `GET /produtos/buscar-codigo?codigo=X` — busca EXATA (não substring)
+  por `codigo_barras` OU `sku`, só produtos ativos. Deliberadamente
+  diferente da busca unificada de `listar()`: um scanner sempre lê um
+  código completo, então substring abriria brecha pra casar com o
+  produto errado quando um código é prefixo/sufixo de outro (coberto
+  por teste). Registrada antes de `/{produto_id}` no router pra não
+  colidir com o path param.
+- Migration 012 (`etiqueta_modelos`): tabela nova, RLS + FORCE RLS,
+  isolada por `tenant_id`, com `config_json` (JSONB) de forma livre —
+  mesmo padrão de `produtos.campos_customizados`: o schema Pydantic só
+  valida tamanho do payload (limite de 20KB), o conteúdo semântico
+  (elementos exibidos, tipo de código, tamanho da etiqueta, colunas,
+  margem/espaçamento, modo de impressão preferido) é interpretado pelo
+  frontend, que ainda não existe nesta etapa.
+- Módulo `etiquetas` novo: `POST/GET/PATCH/DELETE /etiquetas/modelos`,
+  seguindo exatamente o mesmo padrão de outros módulos (perfis
+  admin/operador podem escrever, leitura só lê; 404 — não 403 — em
+  acesso cross-tenant).
+
+**Verificação:** Postgres 16 local recriado do zero via
+`setup_test_db.sh` (roles restritos, sem BYPASSRLS) — as 12 migrations
+aplicaram sem erro. 218/218 testes passando (212 na suíte principal +
+6 de `test_auth.py` isolado — comportamento intermitente já
+documentado, não regressão). Testes novos cobrem busca exata por
+código (com/sem sku, produto inativo, isolamento entre tenants,
+código inexistente) e o CRUD completo de modelos de etiqueta
+(permissões por perfil, isolamento entre tenants, validação de nome
+vazio). Bandit 0 issues (4803 linhas). `tsc --noEmit` e `next build`
+limpos (sem mudança de frontend ainda — rodados por completude do
+processo, já que a Etapa 30 já mexe em frontend em cima desta base).
+
+**Decisões de escopo fechadas com o usuário durante o design:**
+
+- Leitor físico USB/Bluetooth (modo HID — "digita" o código + Enter em
+  qualquer campo focado) fica coexistindo com câmera e digitação manual
+  no mesmo campo de busca, sem o usuário escolher nada — a Etapa 30
+  precisa detectar o padrão de digitação rápida + Enter pra distinguir
+  leitura física de digitação humana.
+- Inventário mantém os dois modos de contagem desenhados no preview
+  (Modo A: rola até a linha na tabela geral; Modo B: fila de cartões)
+  como abas — usuário não quis eliminar nenhum.
+- Tela de Etiquetas é uma tela nova própria (não um wizard de passos —
+  foge do padrão do resto do sistema), com preview ao vivo, mantendo o
+  ícone de "gerar etiqueta rápida" já existente na linha de Produto
+  pro caso de uso de 1 produto só.
+- Impressão: navegador (`window.print`) é o padrão, funciona sem
+  instalar nada; QZ Tray fica como modo avançado opcional pra quem
+  quer imprimir direto na Zebra sem diálogo — nenhum navegador permite
+  impressão direta sem instalar um agente local, por design de
+  segurança (não é limitação do NexStock).
