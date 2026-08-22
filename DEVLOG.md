@@ -2609,3 +2609,29 @@ completo em todas as frentes desenhadas no preview original, sem
 pendências abertas além das já documentadas na Etapa 33 (serialização
 do QR no print via QZ Tray, certificado QZ Tray assinado, exportação
 de PDF standalone).
+
+
+## Correção — Migration 012 aplicada no schema errado no Supabase staging
+
+Ao aplicar a migration 012 (`etiqueta_modelos`) no Supabase staging via
+MCP, a tabela foi criada no schema `public` em vez de
+`estoque_inteligente` — o `search_path` da sessão da ferramenta MCP não
+está setado pro schema do projeto (diferente do padrão configurado pro
+role da aplicação em produção). Todas as migrations anteriores (001–011)
+nunca tiveram esse problema porque foram escritas sem qualificação de
+schema, confiando no `search_path`; essa foi a primeira vez que o
+`search_path` da sessão MCP não bateu com o esperado.
+
+**Correção aplicada:** `drop table public.etiqueta_modelos` + recriação
+completa em `estoque_inteligente.etiqueta_modelos`, desta vez com o
+schema qualificado explicitamente em toda referência (incluindo a FK
+pra `estoque_inteligente.tenants`), pra não depender de `search_path`
+de novo. Confirmado via `pg_class` que `relrowsecurity` e
+`relforcerowsecurity` estão `true` na tabela correta.
+
+**Aprendizado para o futuro:** ao aplicar migrations via Supabase MCP
+(`apply_migration`/`execute_sql`), sempre qualificar o schema
+explicitamente nos `CREATE TABLE`/`REFERENCES` em vez de confiar no
+`search_path` da sessão — migrations locais (via `setup_test_db.sh`)
+não têm esse risco porque o `search_path` do banco de teste é
+configurado de forma consistente, mas a sessão MCP pode divergir.
