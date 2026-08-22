@@ -405,3 +405,29 @@ export type UsuarioCreateResult = {
   usuario: Usuario;
   senha_provisoria: string;
 };
+
+export type EtiquetaElementos = {
+  nome: boolean;
+  sku: boolean;
+  preco: boolean;
+  marca: boolean;
+};
+
+export type EtiquetaConfig = {
+  elementos: EtiquetaElementos;
+  tipoCodigo: "barras" | "qr";
+  tamanho: "30x20" | "40x30" | "50x40";
+  colunas: number;
+  margemMm: number;
+  espacamentoMm: number;
+  modoImpressao: "navegador" | "qztray";
+  impressora: string;
+};
+
+export type EtiquetaModelo = {
+  id: string;
+  nome: string;
+  config_json: EtiquetaConfig;
+  criado_em: string;
+  atualizado_em: string;
+};

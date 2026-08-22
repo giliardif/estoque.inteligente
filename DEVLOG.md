@@ -2452,3 +2452,56 @@ kB, `/inventario` 7.08 kB). Suíte de backend re-confirmada (212/212 +
 
 **Próxima:** Etapa 32 — tela Etiquetas completa (frontend), consumindo
 o CRUD de modelos da Etapa 29.
+
+
+## Etapa 32 — Tela Etiquetas completa (geração em lote)
+
+Quarta etapa do item de código de barras/QR — tela nova consumindo o
+CRUD de modelos da Etapa 29 e reaproveitando `ScannerCodigo` da Etapa 30.
+
+**Implementado:**
+
+- Item "Etiquetas" novo no menu lateral (`layout.tsx`), entre Inventário
+  e Notas Fiscais.
+- `components/etiquetas/EtiquetaLabel.tsx`: renderiza uma etiqueta única
+  com código de barras real (`jsbarcode`, SVG) ou QR real (`qrcode`,
+  canvas) — fundo branco fixo, independente do tema claro/escuro do app,
+  já que reflete papel impresso de verdade. Produto sem `codigo_barras`
+  cai automaticamente pro QR usando o `id` como valor (mesma decisão
+  fechada no design da Etapa 29).
+- `app/(dashboard)/etiquetas/page.tsx`: tela única com 3 colunas (não um
+  wizard — mantém consistência com o resto do sistema), exatamente como
+  aprovado no preview:
+  - **Produtos selecionados**: busca por nome/SKU pra adicionar, botão
+    de escanear (reaproveita `ScannerCodigo`), quantidade editável por
+    item, total de etiquetas.
+  - **Configuração**: checkboxes de elementos (nome/SKU/preço/marca),
+    tipo de código (barras/QR), tamanho, colunas por página, margem e
+    espaçamento, modo de impressão (navegador/QZ Tray — QZ Tray real
+    fica pra Etapa 33, por enquanto cai no navegador com aviso), campo
+    pra salvar como modelo (`POST /etiquetas/modelos`).
+  - **Visualização**: grade com etiquetas reais (código de barras/QR
+    de verdade, não placeholder), limitada a 60 no preview por
+    performance — a impressão sai com o total completo. Modelos salvos
+    aparecem num seletor no topo e recarregam a config inteira ao
+    escolher.
+- Impressão via `window.print()` com stylesheet `@media print` dedicada
+  (`#grade-impressao`), que esconde todo o resto da página e mostra só
+  a grade completa de etiquetas — abre o diálogo nativo do navegador,
+  de onde dá pra escolher a impressora Zebra/Elgin já instalada no SO
+  ou "Salvar como PDF".
+
+**Verificação:** `tsc --noEmit` e `next build` limpos (`/etiquetas`
+30.2 kB — maior que as outras rotas por carregar `jsbarcode` + `qrcode`,
+esperado). Suíte de backend reconfirmada (212/212 + 6 isolados), Bandit
+0 — sem mudança de backend nesta etapa.
+
+**Ainda não implementado nesta etapa** (fica pro backlog, não bloqueia
+a tela funcionar): ícone de "gerar etiqueta rápida" na linha de Produto
+(caso de uso de 1 produto só, desenhado no preview original mas não
+essencial já que a tela em lote cobre qualquer quantidade, inclusive 1);
+exportação de PDF standalone (hoje usa "Salvar como PDF" do próprio
+diálogo de impressão do navegador).
+
+**Próxima:** Etapa 33 — integração QZ Tray (impressão direta na Zebra,
+sem diálogo do navegador).

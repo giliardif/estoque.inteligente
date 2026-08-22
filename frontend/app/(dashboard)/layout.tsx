@@ -9,7 +9,7 @@ import { useTheme } from "@/lib/theme/useTheme";
 import ToggleTema from "@/components/ui/ToggleTema";
 import {
   LayoutGrid, Package, Boxes, ArrowLeftRight, ClipboardList, FileText,
-  BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X, Users,
+  BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X, Users, Tag,
 } from "lucide-react";
 
 const nav = [
@@ -19,6 +19,7 @@ const nav = [
   { href: "/estoque", label: "Estoque", icon: Boxes },
   { href: "/movimentacao", label: "Movimentação", icon: ArrowLeftRight },
   { href: "/inventario", label: "Inventário", icon: ClipboardList },
+  { href: "/etiquetas", label: "Etiquetas", icon: Tag },
   { href: "/notas", label: "Notas Fiscais", icon: FileText },
   { href: "/compras", label: "Compras", icon: ShoppingBag },
   { href: "/alertas", label: "Alertas", icon: Bell },
