@@ -2412,3 +2412,43 @@ o que é estritamente melhor do que um screenshot estático.
 **Próxima:** Etapa 31 — scanner em Estoque e Inventário, com os dois
 modos de contagem (rolar até a linha / fila de cartões) definidos no
 preview.
+
+
+## Etapa 31 — Scanner em Estoque e Inventário (dois modos de contagem)
+
+Terceira etapa do item de código de barras/QR, reaproveitando
+`ScannerCodigo` e `useLeitorFisico` da Etapa 30 sem duplicar nada.
+
+**Estoque:** botão "Escanear" + leitor físico no campo de busca.
+Diferente de Vendas (que adiciona ao carrinho), aqui o produto
+encontrado só precisa aparecer na lista — como o painel de Estoque já
+filtra server-side por nome/SKU/`codigo_barras` (ILIKE, endpoint
+`/estoque/painel`), bastou colocar o código lido no campo de busca
+existente (`setBusca`) pra reaproveitar o filtro que já existia, sem
+precisar de scroll/highlight manual no DOM.
+
+**Inventário — os dois modos aprovados no preview, ambos implementados:**
+
+- **Tabela geral:** ao bipar, a linha do produto na tabela (desktop) ou
+  card (mobile) pisca em verde por ~900ms e o campo de quantidade recebe
+  foco automaticamente — usa `scrollIntoView` + `.focus()` num ref por
+  produto.
+- **Fila de contagem:** esconde a tabela toda; cada bipagem adiciona um
+  cartão no topo da fila (nome, SKU/código, campo de quantidade já
+  focado). Link "Ver tabela completa" alterna pra o outro modo sem
+  perder nada — os dois modos compartilham o mesmo estado `contagem`
+  (Record produto_id → valor), só a apresentação muda.
+- Abas "Tabela geral" / "Fila de contagem" ficam visíveis só durante uma
+  contagem em aberto — a lista de inventários já fechados/históricos
+  embaixo não tem esse contexto e não precisa de scanner.
+- Scanner (câmera + leitor físico) só reage quando existe um
+  `inventario` em aberto — bipar um código na tela de listagem de
+  inventários passados (sem contagem ativa) não faz nada, evitando
+  comportamento surpresa.
+
+**Verificação:** `tsc --noEmit` e `next build` limpos (`/estoque` 9.55
+kB, `/inventario` 7.08 kB). Suíte de backend re-confirmada (212/212 +
+6 isolados) e Bandit 0 — sem mudança de backend nesta etapa.
+
+**Próxima:** Etapa 32 — tela Etiquetas completa (frontend), consumindo
+o CRUD de modelos da Etapa 29.

@@ -6,7 +6,9 @@ import { InventarioListaItem, PainelInventario, Produto } from "@/lib/types";
 import {
   useToast, TableSkeletonRows, Pagination, ThOrdenavel, TrHover, RowMenu, useDebouncedValue, useKeyboardShortcuts,
 } from "@/components/ui";
-import { Search, Eye, AlertTriangle } from "lucide-react";
+import { Search, Eye, AlertTriangle, ScanBarcode } from "lucide-react";
+import { ScannerCodigo } from "@/components/scanner/ScannerCodigo";
+import { useLeitorFisico } from "@/lib/useLeitorFisico";
 
 const TAMANHO_PAGINA = 25;
 
@@ -37,6 +39,43 @@ export default function InventarioPage() {
   const [direcao, setDirecao] = useState<"asc" | "desc">("desc");
 
   const buscaRef = useRef<HTMLInputElement>(null);
+
+  // --- Scanner (só faz sentido durante uma contagem em aberto) -----------
+  const [scannerAberto, setScannerAberto] = useState(false);
+  const [modoContagem, setModoContagem] = useState<"tabela" | "fila">("tabela");
+  const [filaContagem, setFilaContagem] = useState<string[]>([]);
+  const [linhaDestacadaId, setLinhaDestacadaId] = useState<string | null>(null);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  function localizarProdutoNaContagem(produto: Produto) {
+    if (modoContagem === "fila") {
+      setFilaContagem((atual) => (atual.includes(produto.id) ? atual : [produto.id, ...atual]));
+    }
+    setLinhaDestacadaId(produto.id);
+    // Espera o próximo tick pro item aparecer no DOM (relevante no modo
+    // fila, onde o card só existe depois do setFilaContagem acima).
+    setTimeout(() => {
+      inputRefs.current[produto.id]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      inputRefs.current[produto.id]?.focus();
+    }, 50);
+    setTimeout(() => setLinhaDestacadaId((atual) => (atual === produto.id ? null : atual)), 900);
+  }
+
+  const buscarELocalizarNaContagem = useCallback(async (codigo: string) => {
+    if (!inventario) return; // sem contagem em aberto, bipar não tem o que fazer aqui
+    try {
+      const produto = await apiFetch<Produto>(`/produtos/buscar-codigo?codigo=${encodeURIComponent(codigo)}`);
+      localizarProdutoNaContagem(produto);
+    } catch (err) {
+      const msg = err instanceof ApiError && err.status === 404
+        ? "Nenhum produto encontrado para esse código."
+        : "Não foi possível buscar o produto.";
+      toastErro(msg);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inventario, modoContagem, toastErro]);
+
+  useLeitorFisico(buscarELocalizarNaContagem);
 
   const carregarPainel = useCallback(async () => {
     setCarregando(true);
@@ -205,47 +244,141 @@ export default function InventarioPage() {
             </button>
           </div>
 
-          {/* Cards — mobile apenas */}
-          <div className="flex flex-col gap-2 p-3.5 md:hidden">
-            {produtos.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate">{p.nome}</span>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={contagem[p.id] ?? ""}
-                  onChange={(e) => setContagem({ ...contagem, [p.id]: e.target.value })}
-                  className="rounded-md px-2 py-1 text-sm outline-none border w-20 shrink-0"
-                  style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
-                />
-              </div>
-            ))}
+          <div className="px-5 py-3 border-b flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: "var(--cor-borda)" }}>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setModoContagem("tabela")}
+                className="rounded-md px-3 py-1.5 text-xs font-semibold border"
+                style={modoContagem === "tabela"
+                  ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
+                  : { background: "transparent", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+              >
+                Tabela geral
+              </button>
+              <button
+                onClick={() => setModoContagem("fila")}
+                className="rounded-md px-3 py-1.5 text-xs font-semibold border"
+                style={modoContagem === "fila"
+                  ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
+                  : { background: "transparent", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+              >
+                Fila de contagem
+              </button>
+            </div>
+            <button
+              onClick={() => setScannerAberto(true)}
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold"
+              style={{ background: "var(--cor-acento)", color: "#06231a" }}
+            >
+              <ScanBarcode size={13} /> Escanear
+            </button>
           </div>
 
-          {/* Tabela — desktop apenas */}
-          <table className="hidden md:table w-full text-sm">
-            <thead>
-              <tr>
-                <th className="text-left px-5 py-2 text-xs font-semibold uppercase" style={{ color: "var(--cor-texto-muted)" }}>Produto</th>
-                <th className="text-left px-3 py-2 text-xs font-semibold uppercase" style={{ color: "var(--cor-texto-muted)" }}>Contagem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {produtos.map((p) => (
-                <tr key={p.id} style={{ borderTop: "1px solid var(--cor-borda)" }}>
-                  <td className="px-5 py-2">{p.nome}</td>
-                  <td className="px-3 py-2">
+          {modoContagem === "tabela" ? (
+            <>
+              {/* Cards — mobile apenas */}
+              <div className="flex flex-col gap-2 p-3.5 md:hidden">
+                {produtos.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between gap-2 text-sm rounded-md px-1.5 py-1 transition-colors"
+                    style={{ background: linhaDestacadaId === p.id ? "rgba(16,185,129,0.18)" : "transparent" }}
+                  >
+                    <span className="truncate">{p.nome}</span>
                     <input
+                      ref={(el) => { inputRefs.current[p.id] = el; }}
                       type="number" min="0" step="0.01"
                       value={contagem[p.id] ?? ""}
                       onChange={(e) => setContagem({ ...contagem, [p.id]: e.target.value })}
-                      className="rounded-md px-2 py-1 text-sm outline-none border w-24"
+                      className="rounded-md px-2 py-1 text-sm outline-none border w-20 shrink-0"
                       style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
                     />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tabela — desktop apenas */}
+              <table className="hidden md:table w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="text-left px-5 py-2 text-xs font-semibold uppercase" style={{ color: "var(--cor-texto-muted)" }}>Produto</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold uppercase" style={{ color: "var(--cor-texto-muted)" }}>Contagem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {produtos.map((p) => (
+                    <tr
+                      key={p.id}
+                      style={{ borderTop: "1px solid var(--cor-borda)", background: linhaDestacadaId === p.id ? "rgba(16,185,129,0.18)" : "transparent" }}
+                      className="transition-colors"
+                    >
+                      <td className="px-5 py-2">{p.nome}</td>
+                      <td className="px-3 py-2">
+                        <input
+                          ref={(el) => { inputRefs.current[p.id] = el; }}
+                          type="number" min="0" step="0.01"
+                          value={contagem[p.id] ?? ""}
+                          onChange={(e) => setContagem({ ...contagem, [p.id]: e.target.value })}
+                          className="rounded-md px-2 py-1 text-sm outline-none border w-24"
+                          style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            // Fila de contagem: só mostra o que já foi bipado, mais recente
+            // no topo — pensada pra quem tá andando pela loja com o leitor,
+            // sem precisar rolar a tabela inteira pra achar cada item.
+            <div className="flex flex-col gap-2 p-3.5">
+              {filaContagem.length === 0 && (
+                <div className="text-center text-sm py-8" style={{ color: "var(--cor-texto-muted)" }}>
+                  Nenhum item bipado ainda. Clique em &quot;Escanear&quot; ou use o leitor físico pra começar.
+                </div>
+              )}
+              {filaContagem.map((produtoId) => {
+                const p = produtos.find((x) => x.id === produtoId);
+                if (!p) return null;
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-3 rounded-lg border px-3.5 py-2.5 transition-colors"
+                    style={{
+                      borderColor: linhaDestacadaId === p.id ? "var(--cor-acento)" : "var(--cor-borda)",
+                      background: linhaDestacadaId === p.id ? "rgba(16,185,129,0.1)" : "var(--cor-base)",
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{p.nome}</div>
+                      <div className="text-xs font-mono" style={{ color: "var(--cor-texto-muted)" }}>
+                        {p.sku || p.codigo_barras || "—"}
+                      </div>
+                    </div>
+                    <input
+                      ref={(el) => { inputRefs.current[p.id] = el; }}
+                      type="number" min="0" step="0.01"
+                      value={contagem[p.id] ?? ""}
+                      onChange={(e) => setContagem({ ...contagem, [p.id]: e.target.value })}
+                      placeholder="Qtd."
+                      className="rounded-md px-2 py-1.5 text-sm outline-none border w-24 shrink-0"
+                      style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
+                    />
+                  </div>
+                );
+              })}
+              {filaContagem.length > 0 && (
+                <button
+                  onClick={() => setModoContagem("tabela")}
+                  className="text-xs font-semibold self-start mt-1"
+                  style={{ color: "var(--cor-acento)" }}
+                >
+                  Ver tabela completa →
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -352,6 +485,12 @@ export default function InventarioPage() {
           <Pagination pagina={pagina} tamanhoPagina={TAMANHO_PAGINA} total={painel.total} onPaginaChange={setPagina} />
         )}
       </div>
+
+      <ScannerCodigo
+        aberto={scannerAberto}
+        onFechar={() => setScannerAberto(false)}
+        onProdutoEncontrado={localizarProdutoNaContagem}
+      />
     </div>
   );
 }

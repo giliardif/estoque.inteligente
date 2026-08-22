@@ -3,15 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
-import { ItemEstoque, PainelEstoque, PrioridadeEstoque } from "@/lib/types";
+import { ItemEstoque, PainelEstoque, PrioridadeEstoque, Produto } from "@/lib/types";
 import { ProdutoForm } from "@/components/produtos/ProdutoForm";
+import { ScannerCodigo } from "@/components/scanner/ScannerCodigo";
+import { useLeitorFisico } from "@/lib/useLeitorFisico";
 import {
   useToast, ConfirmDialog, QuickCreateDialog, TableSkeletonRows, Pagination, ThOrdenavel, TrHover,
   useSelecaoMultipla, BulkActionBar, RowMenu, useDebouncedValue, useKeyboardShortcuts,
 } from "@/components/ui";
 import {
   Search, RefreshCw, FileDown, Upload, Plus, ArrowDownToLine, ArrowUpFromLine,
-  ArrowLeftRight, SlidersHorizontal, ClipboardList, Download,
+  ArrowLeftRight, SlidersHorizontal, ClipboardList, Download, ScanBarcode,
 } from "lucide-react";
 
 const TAMANHO_PAGINA = 25;
@@ -41,6 +43,7 @@ export default function EstoquePage() {
   const [somenteSemEstoque, setSomenteSemEstoque] = useState(false);
   const [somenteVencimentoProximo, setSomenteVencimentoProximo] = useState(false);
   const [pagina, setPagina] = useState(1);
+  const [scannerAberto, setScannerAberto] = useState(false);
 
   const [mostrarForm, setMostrarForm] = useState(false);
   const [criarRapido, setCriarRapido] = useState<"categoria" | "deposito" | "fornecedor" | null>(null);
@@ -50,6 +53,31 @@ export default function EstoquePage() {
   const [desativando, setDesativando] = useState(false);
 
   const buscaRef = useRef<HTMLInputElement>(null);
+
+  // --- Scanner ------------------------------------------------------------
+  // A busca do painel já filtra por nome/SKU/codigo_barras no backend
+  // (ILIKE), então localizar um produto lido pelo scanner é simplesmente
+  // colocar o código exato no campo de busca — o próprio filtro server-side
+  // já leva direto pro item certo, sem precisar de scroll/highlight manual.
+  function localizarProdutoNoPainel(produto: Produto) {
+    setBusca(produto.codigo_barras || produto.sku || produto.nome);
+    setPagina(1);
+    sucesso(`Localizado: ${produto.nome}`);
+  }
+
+  const buscarELocalizarPorCodigo = useCallback(async (codigo: string) => {
+    try {
+      const produto = await apiFetch<Produto>(`/produtos/buscar-codigo?codigo=${encodeURIComponent(codigo)}`);
+      localizarProdutoNoPainel(produto);
+    } catch (err) {
+      const msg = err instanceof ApiError && err.status === 404
+        ? "Nenhum produto encontrado para esse código."
+        : "Não foi possível buscar o produto.";
+      toastErro(msg);
+    }
+  }, [toastErro]);
+
+  useLeitorFisico(buscarELocalizarPorCodigo);
 
   const [ordenarPor, setOrdenarPor] = useState("nome");
   const [direcao, setDirecao] = useState<"asc" | "desc">("asc");
@@ -266,6 +294,13 @@ export default function EstoquePage() {
               className="bg-transparent outline-none text-sm w-full"
             />
           </div>
+          <button
+            onClick={() => setScannerAberto(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold shrink-0"
+            style={{ background: "var(--cor-acento)", color: "#06231a" }}
+          >
+            <ScanBarcode size={14} /> Escanear
+          </button>
 
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:contents">
             <SeletorFiltro
@@ -582,6 +617,12 @@ export default function EstoquePage() {
         salvando={salvandoCriarRapido}
         onCriar={confirmarCriacaoRapida}
         onCancelar={() => setCriarRapido(null)}
+      />
+
+      <ScannerCodigo
+        aberto={scannerAberto}
+        onFechar={() => setScannerAberto(false)}
+        onProdutoEncontrado={localizarProdutoNoPainel}
       />
     </div>
   );
