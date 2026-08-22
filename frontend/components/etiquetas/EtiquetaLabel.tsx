@@ -5,8 +5,10 @@ import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 import { EtiquetaConfig, Produto } from "@/lib/types";
 
+type ProdutoParaEtiqueta = Pick<Produto, "id" | "nome" | "sku" | "codigo_barras" | "marca" | "preco_venda">;
+
 type EtiquetaLabelProps = {
-  produto: Produto;
+  produto: ProdutoParaEtiqueta;
   config: EtiquetaConfig;
 };
 

@@ -2567,3 +2567,45 @@ não foram feitas ainda): ícone de "gerar etiqueta rápida" na linha de
 Produto (caso de uso de 1 produto só); corrigir serialização do QR no
 print via QZ Tray; certificado QZ Tray assinado; exportação de PDF
 standalone sem depender do diálogo do navegador.
+
+
+## Etapa 34 — Gerar etiqueta rápida na listagem de Produtos
+
+Pendência deixada em aberto desde a Etapa 32: ícone de "gerar etiqueta
+rápida" na linha do Produto, pro caso de uso de 1 produto só, sem
+precisar ir pra tela Etiquetas em lote.
+
+**Implementado:**
+
+- `components/etiquetas/GerarEtiquetaRapidaDialog.tsx`: diálogo mínimo
+  — preview em tamanho real (reaproveita `EtiquetaLabel`, o mesmo
+  componente da tela em lote), toggle de tipo de código (barras/QR) e
+  campo de cópias. Sem configurador completo (elementos, tamanho,
+  colunas, modelos salvos) — esse é o propósito da tela em lote; aqui é
+  deliberadamente rápido: 2 cliques e imprime.
+- `EtiquetaLabel` teve o tipo do prop `produto` estreitado de `Produto`
+  pra um `Pick` só dos campos realmente usados (`id`, `nome`, `sku`,
+  `codigo_barras`, `marca`, `preco_venda`) — permite reusar o componente
+  tanto com o tipo `Produto` completo (tela em lote) quanto com
+  `ItemProdutoLista` (listagem de Produtos, que não carrega todos os
+  campos de `Produto`) sem precisar montar um objeto adaptado feito à
+  mão, como o diálogo de edição já faz.
+- Item "Gerar etiqueta" novo no `RowMenu` da listagem de Produtos
+  (mobile e desktop), ao lado de "Editar".
+- Aviso inline no diálogo quando o produto não tem `codigo_barras`
+  cadastrado e o tipo "Código de barras" está selecionado — a etiqueta
+  sai com QR (fallback pro `id`) mesmo assim, mas o usuário é avisado
+  do porquê antes de imprimir, não depois.
+
+**Verificação:** `tsc --noEmit` e `next build` limpos. Rota `/produtos`
+subiu de 7.81 kB pra 8.31 kB; `/etiquetas` caiu de 31.3 kB pra 6.98 kB
+porque o chunk compartilhado com `jsbarcode`/`qrcode` (usado agora por
+duas rotas) foi promovido pro bundle comum pelo Next — soma total
+equivalente, sem regressão real de peso. Suíte de backend reconfirmada
+(212/212 + 6 isolados), Bandit 0 — sem mudança de backend nesta etapa.
+
+Com esta etapa, o item de backlog "Barcode/QR via câmera" está
+completo em todas as frentes desenhadas no preview original, sem
+pendências abertas além das já documentadas na Etapa 33 (serialização
+do QR no print via QZ Tray, certificado QZ Tray assinado, exportação
+de PDF standalone).

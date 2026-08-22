@@ -5,11 +5,12 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { ItemProdutoLista, PainelProdutos } from "@/lib/types";
 import { ProdutoForm } from "@/components/produtos/ProdutoForm";
 import { ImportarProdutosDialog } from "@/components/produtos/ImportarProdutosDialog";
+import { GerarEtiquetaRapidaDialog } from "@/components/etiquetas/GerarEtiquetaRapidaDialog";
 import {
   useToast, ConfirmDialog, QuickCreateDialog, TableSkeletonRows, Pagination, ThOrdenavel, TrHover,
   useSelecaoMultipla, BulkActionBar, RowMenu, useDebouncedValue, useKeyboardShortcuts,
 } from "@/components/ui";
-import { Search, Plus, Download, Pencil, Upload } from "lucide-react";
+import { Search, Plus, Download, Pencil, Upload, Tag } from "lucide-react";
 
 const TAMANHO_PAGINA = 25;
 
@@ -30,6 +31,7 @@ export default function ProdutosPage() {
 
   const [mostrarForm, setMostrarForm] = useState(false);
   const [produtoEditando, setProdutoEditando] = useState<ItemProdutoLista | null>(null);
+  const [produtoParaEtiqueta, setProdutoParaEtiqueta] = useState<ItemProdutoLista | null>(null);
   const [produtoParaDesativar, setProdutoParaDesativar] = useState<ItemProdutoLista | null>(null);
   const [desativando, setDesativando] = useState(false);
   const [criarCategoria, setCriarCategoria] = useState(false);
@@ -302,6 +304,7 @@ export default function ProdutosPage() {
               <RowMenu
                 itens={[
                   { label: "Editar", icon: <Pencil size={13} />, onClick: () => setProdutoEditando(p) },
+                  { label: "Gerar etiqueta", icon: <Tag size={13} />, onClick: () => setProdutoParaEtiqueta(p) },
                   ...(p.ativo
                     ? [{ label: "Desativar produto", perigoso: true, onClick: () => setProdutoParaDesativar(p) }]
                     : []),
@@ -436,6 +439,7 @@ export default function ProdutosPage() {
                   <RowMenu
                     itens={[
                       { label: "Editar", icon: <Pencil size={13} />, onClick: () => setProdutoEditando(p) },
+                      { label: "Gerar etiqueta", icon: <Tag size={13} />, onClick: () => setProdutoParaEtiqueta(p) },
                       ...(p.ativo
                         ? [{ label: "Desativar produto", perigoso: true, onClick: () => setProdutoParaDesativar(p) }]
                         : []),
@@ -490,6 +494,13 @@ export default function ProdutosPage() {
         onCriar={confirmarCriacaoCategoria}
         onCancelar={() => setCriarCategoria(false)}
       />
+
+      {produtoParaEtiqueta && (
+        <GerarEtiquetaRapidaDialog
+          produto={produtoParaEtiqueta}
+          onFechar={() => setProdutoParaEtiqueta(null)}
+        />
+      )}
     </div>
   );
 }
