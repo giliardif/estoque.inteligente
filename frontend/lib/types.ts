@@ -352,6 +352,22 @@ export type PontoMovimentacao = { data: string; entradas: number; saidas: number
 
 export type ProdutoGiro = { produto_id: string; nome: string; giro_dias: number | null; saldo_atual: number };
 
+// --- PDV (Etapa 35 — redesign) ---------------------------------------------
+
+export type Categoria = { id: string; nome: string; categoria_pai_id: string | null };
+
+export type ProdutoMaisVendido = {
+  produto_id: string;
+  nome: string;
+  sku: string | null;
+  codigo_barras: string | null;
+  preco_venda: number | null;
+  custo_medio: number;
+  unidade_medida: string;
+  imagem_url: string | null;
+  quantidade_vendida: number;
+};
+
 export type CategoriaResumo = { categoria_id: string | null; nome: string; produtos: number; percentual: number };
 
 export type ProdutoCritico = {

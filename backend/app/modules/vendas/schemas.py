@@ -56,3 +56,22 @@ class PainelVendasOut(BaseModel):
     total: int
     pagina: int
     tamanho: int
+
+
+# --- Mais vendidos (Etapa 35 — redesign do PDV) -----------------------------
+#
+# Ranking real de vendas (soma de quantidade em VendaItem de vendas
+# finalizadas), diferente de "giro de estoque" do Painel Home (que mede
+# velocidade de saída do saldo, não popularidade de venda). Usado pelas
+# trilhas de produtos em destaque na tela de PDV.
+
+class ProdutoMaisVendidoOut(BaseModel):
+    produto_id: UUID
+    nome: str
+    sku: str | None
+    codigo_barras: str | None
+    preco_venda: float | None
+    custo_medio: float
+    unidade_medida: str
+    imagem_url: str | None
+    quantidade_vendida: float

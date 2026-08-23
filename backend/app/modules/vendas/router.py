@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_for_tenant
 from app.core.security import CurrentUser, get_current_user, require_perfil
 from app.modules.vendas import service
-from app.modules.vendas.schemas import PainelVendasOut, VendaCreate, VendaOut
+from app.modules.vendas.schemas import PainelVendasOut, ProdutoMaisVendidoOut, VendaCreate, VendaOut
 
 router = APIRouter(prefix="/vendas", tags=["vendas"])
 
@@ -48,6 +48,17 @@ async def painel_vendas(
         db, tenant_id=user.tenant_id, data_inicio=data_inicio, data_fim=data_fim, status_venda=status_venda,
         busca=busca, ordenar_por=ordenar_por, direcao=direcao, pagina=pagina, tamanho=tamanho,
     )
+
+
+# IMPORTANTE: mesmo motivo do "/painel" acima — precisa vir antes de "/{venda_id}".
+@router.get("/mais-vendidos", response_model=list[ProdutoMaisVendidoOut])
+async def mais_vendidos(
+    dias: int = Query(default=30, ge=1, le=365),
+    limite: int = Query(default=8, ge=1, le=50),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    return await service.mais_vendidos(db, tenant_id=user.tenant_id, dias=dias, limite=limite)
 
 
 @router.post("/{venda_id}/cancelar", response_model=VendaOut)

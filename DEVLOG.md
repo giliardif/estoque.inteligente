@@ -2635,3 +2635,101 @@ explicitamente nos `CREATE TABLE`/`REFERENCES` em vez de confiar no
 `search_path` da sessão — migrations locais (via `setup_test_db.sh`)
 não têm esse risco porque o `search_path` do banco de teste é
 configurado de forma consistente, mas a sessão MCP pode divergir.
+
+
+## Etapa 35 — Redesign do PDV (mockup aprovado + implementação)
+
+Pedido do usuário: "melhorar" a tela de PDV com liberdade criativa total
+("surpreenda-me com algo bem diferente"), escopo na tela toda (PDV +
+histórico de Vendas). Fluxo seguido: preview HTML interativo aprovado
+primeiro (`mockup-pdv-nexstock.html`, com tokens NexStock reais e
+sidebar fixa 240px), só depois código.
+
+**Conceito central do redesign:** o carrinho virou um "cupom fiscal" de
+verdade — papel com borda serrilhada, razão em fonte mono e leader dots
+entre item e preço, em vez de mais uma lista genérica. O catálogo virou
+trilhas horizontais por categoria em vez de grade fixa. Caixa e Vendas
+saíram do fluxo principal (que antes ocupava 1/3 da tela sempre) e
+viraram um dock inferior recolhível — o operador passa a maior parte do
+tempo escaneando/vendendo, não olhando histórico.
+
+**Descobertas reais durante a checagem do mockup contra o código (antes
+de implementar, não depois):** o print de referência que o usuário
+mandou tinha um módulo de "Caixa" (abertura/fechamento/sangria/suprimento)
+que **não existe** no NexStock hoje — só existia na imagem de
+inspiração. "Mais vendidos" também não existia como métrica (só "giro
+de estoque", que mede outra coisa). E o carrinho usava `custo_medio`
+(preço de custo) em vez de `preco_venda` — bug real, não decisão. As
+três coisas foram levadas ao usuário antes de codar, não assumidas.
+
+**Decisões do usuário:**
+- Caixa: removido do dock por enquanto, mas mapeado visualmente (botão
+  desabilitado com tooltip "Em breve") pra quando o módulo existir.
+- Mais vendidos: endpoint novo de verdade, não reaproveitar giro de
+  estoque.
+- Preço do carrinho: corrigir para `preco_venda`.
+
+**Implementado — backend:**
+- `GET /vendas/mais-vendidos?dias=30&limite=8` novo: ranking por soma
+  de `quantidade` em `VendaItem` de vendas `finalizada`, agrupado por
+  produto, ordenado desc. Ignora vendas canceladas e isola por tenant.
+  Declarado antes de `/{venda_id}` no router, mesmo padrão de
+  `/painel`. 4 testes novos (`test_vendas_mais_vendidos.py`): ordenação
+  por quantidade, exclusão de canceladas, respeito ao `limite`,
+  isolamento entre tenants.
+
+**Implementado — frontend (`vendas/page.tsx`):**
+- Bug corrigido: `adicionarAoCarrinho` agora usa `produto.preco_venda
+  ?? produto.custo_medio` (fallback só pra produto legado sem preço de
+  venda cadastrado).
+- Catálogo em trilhas: "Mais vendidos" (endpoint novo) + uma trilha por
+  categoria real (`GET /categorias`, produtos agrupados por
+  `categoria_id`) + trilha "Outros" pra produto sem categoria. Busca
+  preenchida troca as trilhas por um grid de resultados (nome, SKU ou
+  código de barras).
+- `GET /produtos?tamanho=100` no lugar do fetch sem parâmetro (contrato
+  do endpoint não mudou, só usa um parâmetro que já existia — necessário
+  porque o default de 25 itens não dava catálogo suficiente pras
+  trilhas).
+- Cupom: HTML/CSS (`.torn-cupom-top/bottom`, `.cupom-leader` em
+  `globals.css`) simulando papel de recibo térmico, cor fixa
+  (`#F4F2EC`) independente do tema claro/escuro — cupom real é sempre
+  claro.
+- Forma de pagamento: 6 opções visuais (Dinheiro/PIX/Débito/Crédito/
+  Fiado/Múltiplo), seleção local, **não enviada ao backend** — `POST
+  /vendas` ainda não tem esse campo. Documentado no código como
+  limitação conhecida, não escondida.
+- Dock inferior `sticky bottom-2`: aba "Vendas de hoje" (KPIs reais)
+  abre gaveta (`fixed inset-0`, mesmo padrão de modal já usado no
+  arquivo) com o histórico completo que antes ficava sempre visível —
+  mesmos componentes do kit de UX (`CartaoKpi`, tabela, cards mobile,
+  `RowMenu`, `BulkActionBar`, paginação), só reembalados dentro da
+  gaveta. Aba "Caixa" desabilitada ao lado, mapeada pro futuro.
+- Componentes novos: `TrilhaProdutos` (rail com título/ícone) e
+  `CartaoProduto` (aceita `Produto` ou `ProdutoMaisVendido`, já que os
+  dois alimentam trilhas diferentes).
+
+**Adaptação consciente do mockup para o shell real:** o preview HTML
+assumia `h-screen` fixo (app imersivo, tela cheia). O NexStock real usa
+scroll de página normal dentro do shell existente (sidebar fixa +
+`main` com padding) — replicar um layout 100% viewport-fixed exigiria
+reescrever a arquitetura de scroll do dashboard inteiro, fora do escopo
+desta etapa. Adaptado para `sticky bottom-2` (dock) + `fixed inset-0`
+(gaveta), que entrega a mesma ideia (secundário fora do caminho
+principal, um toque pra abrir) dentro do padrão de scroll já usado por
+todas as outras telas.
+
+**Verificação:** Postgres 16 local recriado do zero, suíte completa
+rodada de verdade — **216/216 passando** + 6 isolados do
+`test_auth.py` (222 total), incluindo os 4 novos. Bandit: 0 issues.
+`tsc --noEmit`: limpo. `next build`: limpo — rota `/vendas` subiu de
+9.x kB pra 10.3 kB (trilhas + cupom + gaveta).
+
+**Pendências deixadas explícitas (não escondidas):**
+- Forma de pagamento não é persistida — precisa de campo novo em
+  `Venda`/`VendaItem` + migration quando for priorizado.
+- Caixa (abertura/fechamento/sangria/suprimento) continua não existindo
+  — dock já preparado com o slot pronto pra receber o módulo real.
+- Sem validação de saldo em tempo real no PDV ao adicionar ao carrinho
+  (mesma limitação de antes desta etapa — a validação real acontece no
+  `POST /vendas`, que já bloqueia com 409 se o saldo for insuficiente).

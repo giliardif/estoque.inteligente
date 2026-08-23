@@ -10,7 +10,7 @@ não elimina falha catastrófica no meio da gravação. Ação futura: mover
 `estoque.service.registrar` para aceitar uma sessão sem commit interno e
 commitar só uma vez no fim da venda inteira.
 """
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -218,6 +218,54 @@ async def painel(
     ]
 
     return {"itens": itens, "kpis": kpis, "total": total, "pagina": pagina, "tamanho": tamanho}
+
+
+# --- Mais vendidos (Etapa 35 — redesign do PDV) -----------------------------
+
+async def mais_vendidos(db: AsyncSession, *, tenant_id: UUID, dias: int = 30, limite: int = 8) -> list[dict]:
+    """Ranking por soma de quantidade vendida (vendas finalizadas) nos últimos
+    `dias` dias. Produto sem nenhuma venda no período simplesmente não aparece
+    — a tela decide o que mostrar no lugar (ex.: produtos ativos recentes)."""
+    inicio_periodo = datetime.now(timezone.utc) - timedelta(days=dias)
+
+    subq_giro = (
+        select(
+            VendaItem.produto_id,
+            func.sum(VendaItem.quantidade).label("quantidade_vendida"),
+        )
+        .join(Venda, Venda.id == VendaItem.venda_id)
+        .where(
+            VendaItem.tenant_id == tenant_id,
+            Venda.status == "finalizada",
+            Venda.criado_em >= inicio_periodo,
+        )
+        .group_by(VendaItem.produto_id)
+        .subquery()
+    )
+
+    stmt = (
+        select(Produto, subq_giro.c.quantidade_vendida)
+        .join(subq_giro, subq_giro.c.produto_id == Produto.id)
+        .where(Produto.tenant_id == tenant_id, Produto.ativo.is_(True))
+        .order_by(subq_giro.c.quantidade_vendida.desc())
+        .limit(limite)
+    )
+
+    linhas = (await db.execute(stmt)).all()
+    return [
+        {
+            "produto_id": produto.id,
+            "nome": produto.nome,
+            "sku": produto.sku,
+            "codigo_barras": produto.codigo_barras,
+            "preco_venda": produto.preco_venda,
+            "custo_medio": produto.custo_medio,
+            "unidade_medida": produto.unidade_medida,
+            "imagem_url": produto.imagem_url,
+            "quantidade_vendida": float(quantidade_vendida),
+        }
+        for produto, quantidade_vendida in linhas
+    ]
 
 
 async def cancelar(db: AsyncSession, *, tenant_id: UUID, usuario_id: UUID, venda_id: UUID) -> Venda:

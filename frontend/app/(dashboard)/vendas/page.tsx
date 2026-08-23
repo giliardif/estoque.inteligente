@@ -1,17 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
-import { Produto, PainelVendas, ItemVendaLista, StatusVenda } from "@/lib/types";
+import { Produto, PainelVendas, ItemVendaLista, StatusVenda, Categoria, ProdutoMaisVendido } from "@/lib/types";
 import {
   useToast, ConfirmDialog, TableSkeletonRows, Pagination, ThOrdenavel, TrHover,
   useSelecaoMultipla, BulkActionBar, RowMenu, useDebouncedValue, useKeyboardShortcuts,
 } from "@/components/ui";
 import { ScannerCodigo } from "@/components/scanner/ScannerCodigo";
 import { useLeitorFisico } from "@/lib/useLeitorFisico";
-import { Minus, Plus, ScanBarcode, Trash2, Eye, Ban, Download, Search } from "lucide-react";
+import {
+  Minus, Plus, ScanBarcode, Trash2, Eye, Ban, Download, Search, X, ChevronUp,
+  Package, Flame, Wallet, Receipt, Clock,
+} from "lucide-react";
 
 type ItemCarrinho = { produto_id: string; nome: string; quantidade: number; preco_unitario: number };
+
+// Formas de pagamento são só seleção visual nesta etapa — o backend ainda não
+// tem campo pra registrar forma de pagamento na venda (POST /vendas não
+// aceita isso hoje). Fica pronto na tela pra quando esse campo existir;
+// não bloqueia nem altera o "Finalizar venda" atual.
+const FORMAS_PAGAMENTO = [
+  { id: "dinheiro", label: "Dinheiro", icone: "💵" },
+  { id: "pix", label: "PIX", icone: "⚡" },
+  { id: "debito", label: "Débito", icone: "💳" },
+  { id: "credito", label: "Crédito", icone: "💳" },
+  { id: "fiado", label: "Fiado", icone: "📒" },
+  { id: "multiplo", label: "Múltiplo", icone: "➕" },
+] as const;
 
 const TAMANHO_PAGINA = 25;
 
@@ -25,26 +41,42 @@ export default function VendasPage() {
 
   // --- PDV / carrinho -------------------------------------------------------
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [maisVendidos, setMaisVendidos] = useState<ProdutoMaisVendido[]>([]);
   const [buscaProduto, setBuscaProduto] = useState("");
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [finalizando, setFinalizando] = useState(false);
   const [scannerAberto, setScannerAberto] = useState(false);
+  const [formaPagamento, setFormaPagamento] = useState<string>("dinheiro");
+  const [drawerVendasAberto, setDrawerVendasAberto] = useState(false);
   const buscaProdutoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    apiFetch<Produto[]>("/produtos").then(setProdutos).catch(() => {});
+    // tamanho=100 (teto do contrato de /produtos) — catálogo do PDV precisa
+    // de mais itens que o default de 25 pra alimentar as trilhas por
+    // categoria. Não altera o contrato do endpoint, só usa um parâmetro que
+    // já existia.
+    apiFetch<Produto[]>("/produtos?tamanho=100").then(setProdutos).catch(() => {});
+    apiFetch<Categoria[]>("/categorias").then(setCategorias).catch(() => {});
+    apiFetch<ProdutoMaisVendido[]>("/vendas/mais-vendidos").then(setMaisVendidos).catch(() => {});
   }, []);
 
   const total = carrinho.reduce((s, i) => s + i.quantidade * i.preco_unitario, 0);
 
-  function adicionarAoCarrinho(produto: Produto) {
+  function adicionarAoCarrinho(produto: Produto | ProdutoMaisVendido) {
+    // Correção de bug real: o carrinho usava custo_medio (preço de CUSTO) em
+    // vez de preco_venda — pré-existente desde a Etapa 1, nunca corrigido
+    // porque preco_venda só passou a existir na Etapa 25. Fallback pro custo
+    // continua existindo só pra produto legado sem preço de venda cadastrado.
+    const preco = produto.preco_venda ?? produto.custo_medio;
     setCarrinho((atual) => {
-      const existente = atual.find((i) => i.produto_id === produto.id);
+      const id = "id" in produto ? produto.id : produto.produto_id;
+      const existente = atual.find((i) => i.produto_id === id);
       if (existente) {
-        return atual.map((i) => i.produto_id === produto.id ? { ...i, quantidade: i.quantidade + 1 } : i);
+        return atual.map((i) => i.produto_id === id ? { ...i, quantidade: i.quantidade + 1 } : i);
       }
-      return [...atual, { produto_id: produto.id, nome: produto.nome, quantidade: 1, preco_unitario: produto.custo_medio || 1 }];
+      return [...atual, { produto_id: id, nome: produto.nome, quantidade: 1, preco_unitario: preco }];
     });
   }
 
@@ -92,6 +124,7 @@ export default function VendasPage() {
       sucesso("Venda finalizada — estoque baixado automaticamente.");
       setCarrinho([]);
       carregarPainel();
+      apiFetch<ProdutoMaisVendido[]>("/vendas/mais-vendidos").then(setMaisVendidos).catch(() => {});
     } catch (err) {
       // Ex: "Saldo insuficiente para X" — mensagem já vem pronta do backend
       setErro(err instanceof ApiError ? err.message : "Não foi possível finalizar a venda.");
@@ -100,7 +133,23 @@ export default function VendasPage() {
     }
   }
 
-  const produtosFiltrados = produtos.filter((p) => p.nome.toLowerCase().includes(buscaProduto.toLowerCase()));
+  const termoBusca = buscaProduto.trim().toLowerCase();
+  const produtosFiltrados = termoBusca
+    ? produtos.filter((p) =>
+        p.nome.toLowerCase().includes(termoBusca) ||
+        p.sku?.toLowerCase().includes(termoBusca) ||
+        p.codigo_barras?.toLowerCase().includes(termoBusca)
+      )
+    : [];
+
+  const produtosPorCategoria = categorias
+    .map((c) => ({ categoria: c, itens: produtos.filter((p) => p.categoria_id === c.id) }))
+    .filter((g) => g.itens.length > 0);
+  const produtosSemCategoria = produtos.filter((p) => !p.categoria_id);
+
+  function quantidadeNoCarrinho(produtoId: string): number {
+    return carrinho.find((i) => i.produto_id === produtoId)?.quantidade ?? 0;
+  }
 
   // --- Histórico / painel (kit de UX) ---------------------------------------
   const [painel, setPainel] = useState<PainelVendas | null>(null);
@@ -231,7 +280,7 @@ export default function VendasPage() {
   });
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 pb-16">
       <div>
         <h1 className="text-xl font-semibold">Vendas / PDV</h1>
         <p className="text-sm" style={{ color: "var(--cor-texto-muted)" }}>
@@ -239,88 +288,243 @@ export default function VendasPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-2">
-        <div className="rounded-xl border p-5" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center gap-2 rounded-md border px-3 py-2 flex-1" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-base)" }}>
+      <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-[1fr_380px]">
+        {/* ===== Balcão: busca/scanner + catálogo em trilhas ===== */}
+        <div className="rounded-xl border p-4 md:p-5 flex flex-col gap-5" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2.5 flex-1" style={{ borderColor: "var(--cor-borda)", background: "var(--cor-base)" }}>
               <ScanBarcode size={15} style={{ color: "var(--cor-acento)" }} />
               <input
                 ref={buscaProdutoRef}
                 value={buscaProduto}
                 onChange={(e) => setBuscaProduto(e.target.value)}
-                placeholder="Buscar produto por nome  (/)"
+                placeholder="Escaneie, digite o código ou nome do produto  (/)"
                 className="bg-transparent outline-none text-sm w-full"
               />
             </div>
             <button
               onClick={() => setScannerAberto(true)}
-              className="flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold shrink-0"
+              className="flex items-center gap-1.5 rounded-md px-3 py-2.5 text-xs font-semibold shrink-0"
               style={{ background: "var(--cor-acento)", color: "#06231a" }}
             >
               <ScanBarcode size={14} /> Escanear
             </button>
           </div>
-          <div className="flex flex-col gap-1 max-h-80 overflow-y-auto">
-            {produtosFiltrados.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => adicionarAoCarrinho(p)}
-                className="flex items-center justify-between px-3 py-2 rounded-md text-sm text-left hover:bg-white/5"
-              >
-                <span>{p.nome}</span>
-                <span style={{ color: "var(--cor-texto-muted)" }}>R$ {p.custo_medio.toFixed(2)}</span>
-              </button>
-            ))}
-          </div>
+
+          {termoBusca ? (
+            <div>
+              <h3 className="font-display font-semibold text-sm mb-3">
+                Resultados {produtosFiltrados.length > 0 && <span style={{ color: "var(--cor-texto-muted)" }}>({produtosFiltrados.length})</span>}
+              </h3>
+              {produtosFiltrados.length === 0 ? (
+                <p className="text-sm" style={{ color: "var(--cor-texto-muted)" }}>Nenhum produto encontrado.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                  {produtosFiltrados.map((p) => (
+                    <CartaoProduto key={p.id} produto={p} qtdNoCarrinho={quantidadeNoCarrinho(p.id)} onAdicionar={() => adicionarAoCarrinho(p)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6 max-h-[560px] overflow-y-auto pr-1">
+              {maisVendidos.length > 0 && (
+                <TrilhaProdutos
+                  titulo="Mais vendidos"
+                  icone={<Flame size={14} style={{ color: "var(--cor-aviso, #F59E0B)" }} />}
+                >
+                  {maisVendidos.map((p) => (
+                    <CartaoProduto key={p.produto_id} produto={p} qtdNoCarrinho={quantidadeNoCarrinho(p.produto_id)} onAdicionar={() => adicionarAoCarrinho(p)} />
+                  ))}
+                </TrilhaProdutos>
+              )}
+
+              {produtosPorCategoria.map(({ categoria, itens }) => (
+                <TrilhaProdutos key={categoria.id} titulo={categoria.nome}>
+                  {itens.map((p) => (
+                    <CartaoProduto key={p.id} produto={p} qtdNoCarrinho={quantidadeNoCarrinho(p.id)} onAdicionar={() => adicionarAoCarrinho(p)} />
+                  ))}
+                </TrilhaProdutos>
+              ))}
+
+              {produtosSemCategoria.length > 0 && (
+                <TrilhaProdutos titulo="Outros">
+                  {produtosSemCategoria.map((p) => (
+                    <CartaoProduto key={p.id} produto={p} qtdNoCarrinho={quantidadeNoCarrinho(p.id)} onAdicionar={() => adicionarAoCarrinho(p)} />
+                  ))}
+                </TrilhaProdutos>
+              )}
+
+              {produtos.length === 0 && (
+                <p className="text-sm" style={{ color: "var(--cor-texto-muted)" }}>Nenhum produto cadastrado ainda.</p>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="rounded-xl border p-5 flex flex-col gap-3" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
-          <h3 className="font-display font-semibold text-sm">Carrinho</h3>
+        {/* ===== Cupom: carrinho em formato de recibo ===== */}
+        <div className="rounded-xl border flex flex-col overflow-hidden" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--cor-texto-muted)" }}>Venda em andamento</div>
+            </div>
+            <span
+              className="text-xs font-semibold px-2 py-1 rounded-full"
+              style={{ background: "color-mix(in srgb, var(--cor-acento) 14%, transparent)", color: "var(--cor-acento-soft, var(--cor-acento))" }}
+            >
+              {carrinho.length} {carrinho.length === 1 ? "item" : "itens"}
+            </span>
+          </div>
 
           {erro && (
-            <div className="text-sm rounded-md px-3 py-2" style={{ color: "var(--cor-alerta)", background: "rgba(162,59,59,0.14)" }}>
+            <div className="mx-4 mb-2 text-sm rounded-md px-3 py-2" style={{ color: "var(--cor-alerta)", background: "rgba(162,59,59,0.14)" }}>
               {erro}
             </div>
           )}
 
-          {carrinho.length === 0 && (
-            <p className="text-sm" style={{ color: "var(--cor-texto-muted)" }}>Nenhum item ainda — clique em um produto ao lado.</p>
-          )}
+          <div className="px-4">
+            <div className="torn-cupom-top" />
+          </div>
+          <div className="mx-4 flex-1 px-4 py-3" style={{ background: "#F4F2EC", color: "#1B263B", minHeight: carrinho.length === 0 ? 80 : undefined }}>
+            <div className="text-center font-display font-semibold text-xs tracking-wide mb-3">CUPOM NÃO FISCAL</div>
 
-          <div className="flex flex-col gap-2">
-            {carrinho.map((i) => (
-              <div key={i.produto_id} className="flex items-center gap-3 text-sm border-b pb-2" style={{ borderColor: "var(--cor-borda)" }}>
-                <span className="flex-1 truncate">{i.nome}</span>
-                <div className="flex items-center gap-2 rounded-md border px-2 py-1 shrink-0" style={{ borderColor: "var(--cor-borda)" }}>
-                  <button onClick={() => alterarQtd(i.produto_id, -1)}><Minus size={13} /></button>
-                  <span>{i.quantidade}</span>
-                  <button onClick={() => alterarQtd(i.produto_id, 1)}><Plus size={13} /></button>
-                </div>
-                <span className="font-semibold w-16 text-right shrink-0">R$ {(i.quantidade * i.preco_unitario).toFixed(2)}</span>
-                <button onClick={() => remover(i.produto_id)} className="shrink-0" style={{ color: "var(--cor-texto-muted)" }}>
-                  <Trash2 size={14} />
-                </button>
+            {carrinho.length === 0 ? (
+              <p className="text-center text-xs py-4" style={{ color: "#6b7280" }}>
+                Nenhum item ainda — toque em um produto ao lado ou escaneie.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2.5 font-mono text-[13px]">
+                {carrinho.map((i) => (
+                  <div key={i.produto_id}>
+                    <div className="flex items-end gap-1">
+                      <span className="font-semibold truncate">{i.nome}</span>
+                      <span className="cupom-leader" />
+                      <span className="font-semibold shrink-0">{(i.quantidade * i.preco_unitario).toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] mt-0.5" style={{ color: "#6b7280" }}>
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => alterarQtd(i.produto_id, -1)} className="w-4 h-4 flex items-center justify-center rounded" style={{ background: "#E5E2D8" }}>
+                          <Minus size={10} />
+                        </button>
+                        <span>{i.quantidade} un × {i.preco_unitario.toFixed(2)}</span>
+                        <button onClick={() => alterarQtd(i.produto_id, 1)} className="w-4 h-4 flex items-center justify-center rounded" style={{ background: "#E5E2D8" }}>
+                          <Plus size={10} />
+                        </button>
+                      </div>
+                      <button onClick={() => remover(i.produto_id)} className="flex items-center gap-1" style={{ color: "#B33939" }}>
+                        <Trash2 size={11} /> remover
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+          </div>
+          <div className="mx-4 px-4 pb-3" style={{ background: "#F4F2EC" }}>
+            <div className="pt-2" style={{ borderTop: "1px dashed #C9C5B8" }}>
+              <div className="flex justify-between items-end pt-2">
+                <span className="font-mono text-xs" style={{ color: "#6b7280" }}>TOTAL</span>
+                <span className="font-display font-bold text-2xl" style={{ color: "#0d7a5a" }}>R$ {total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+          <div className="px-4">
+            <div className="torn-cupom-bottom" />
           </div>
 
-          <div className="flex justify-between items-center pt-2 text-lg font-bold">
-            <span className="text-sm font-normal" style={{ color: "var(--cor-texto-muted)" }}>Total</span>
-            <span>R$ {total.toFixed(2)}</span>
-          </div>
+          {/* Forma de pagamento — seleção visual, ainda não enviada ao backend (ver comentário no topo do arquivo) */}
+          <div className="px-4 pt-3">
+            <div className="text-[11px] uppercase tracking-widest mb-2" style={{ color: "var(--cor-texto-muted)" }}>Forma de pagamento</div>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {FORMAS_PAGAMENTO.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setFormaPagamento(f.id)}
+                  className="flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] font-medium"
+                  style={{
+                    borderColor: formaPagamento === f.id ? "var(--cor-acento)" : "var(--cor-borda)",
+                    background: formaPagamento === f.id ? "color-mix(in srgb, var(--cor-acento) 10%, transparent)" : "var(--cor-base)",
+                  }}
+                >
+                  <span>{f.icone}</span>
+                  <span>{f.label}</span>
+                </button>
+              ))}
+            </div>
 
-          <button
-            onClick={finalizarVenda}
-            disabled={carrinho.length === 0 || finalizando}
-            className="rounded-md py-2.5 font-bold text-sm disabled:opacity-60"
-            style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
-          >
-            {finalizando ? "Finalizando..." : "Finalizar venda"}
-          </button>
+            <button
+              onClick={finalizarVenda}
+              disabled={carrinho.length === 0 || finalizando}
+              className="w-full rounded-md py-3 font-bold text-sm disabled:opacity-60 mb-4"
+              style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
+            >
+              {finalizando ? "Finalizando..." : "Finalizar venda"}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* --- Histórico de vendas (kit de UX) --- */}
+      {/* ===== Dock inferior: Vendas de hoje (Caixa mapeado, ainda não implementado) ===== */}
+      <div className="sticky bottom-2 z-20 flex gap-2">
+        <button
+          onClick={() => setDrawerVendasAberto(true)}
+          className="flex-1 flex items-center justify-between rounded-xl border px-4 py-3 shadow-lg"
+          style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}
+        >
+          <div className="flex items-center gap-3">
+            <Receipt size={18} style={{ color: "var(--cor-acento)" }} />
+            <div className="text-left">
+              <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--cor-texto-muted)" }}>
+                Vendas de hoje · {kpis ? kpis.vendas_hoje : "—"}
+              </div>
+              <div className="text-sm font-semibold font-mono">
+                {kpis ? formatarMoeda(kpis.faturamento_hoje) : "—"}
+              </div>
+            </div>
+          </div>
+          <ChevronUp size={16} style={{ color: "var(--cor-texto-muted)" }} />
+        </button>
+
+        {/* Caixa: sem abertura/fechamento/sangria real no sistema hoje — mapeado
+            aqui como próximo passo natural (dock já preparado pra receber a
+            2ª aba quando o módulo existir), desabilitado por enquanto. */}
+        <button
+          disabled
+          title="Em breve — abertura/fechamento de caixa ainda não existe no NexStock"
+          className="hidden sm:flex items-center gap-3 rounded-xl border px-4 py-3 opacity-50 cursor-not-allowed"
+          style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}
+        >
+          <Wallet size={18} style={{ color: "var(--cor-texto-muted)" }} />
+          <div className="text-left">
+            <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--cor-texto-muted)" }}>Caixa</div>
+            <div className="text-xs font-semibold" style={{ color: "var(--cor-texto-muted)" }}>Em breve</div>
+          </div>
+        </button>
+      </div>
+
+      {/* ===== Gaveta: histórico de vendas de hoje (KPIs + filtros + tabela) ===== */}
+      {drawerVendasAberto && (
+        <div className="fixed inset-0 z-[95] flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Vendas de hoje">
+          <div className="flex-1" style={{ background: "rgba(10,8,6,0.55)" }} onClick={() => setDrawerVendasAberto(false)} aria-hidden />
+          <div
+            className="rounded-t-2xl border-t max-h-[85vh] overflow-y-auto p-4 md:p-6 flex flex-col gap-5"
+            style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)" }}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-display font-semibold text-lg flex items-center gap-2">
+                <Clock size={17} style={{ color: "var(--cor-acento)" }} /> Vendas de hoje
+              </h2>
+              <button
+                onClick={() => setDrawerVendasAberto(false)}
+                className="p-1.5 rounded-lg"
+                style={{ background: "var(--cor-superficie)", color: "var(--cor-texto-muted)" }}
+                aria-label="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* --- Histórico de vendas (kit de UX) --- */}
 
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
         <CartaoKpi titulo="Vendas hoje" valor={kpis ? String(kpis.vendas_hoje) : "—"} />
@@ -526,6 +730,9 @@ export default function VendasPage() {
           <Pagination pagina={pagina} tamanhoPagina={TAMANHO_PAGINA} total={painel.total} onPaginaChange={setPagina} />
         )}
       </div>
+          </div>
+        </div>
+      )}
 
       {vendaDetalhes && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-6 overflow-y-auto" style={{ background: "rgba(10,8,6,0.55)" }} onClick={() => setVendaDetalhes(null)}>
@@ -619,4 +826,61 @@ function CartaoKpi({
 
 function formatarMoeda(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function TrilhaProdutos({ titulo, icone, children }: { titulo: string; icone?: ReactNode; children: ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-2.5">
+        {icone}
+        <h3 className="font-display font-semibold text-sm">{titulo}</h3>
+      </div>
+      <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1">{children}</div>
+    </div>
+  );
+}
+
+// Aceita Produto (catálogo) ou ProdutoMaisVendido (ranking) — os dois têm o
+// suficiente pra renderizar o cartão; o id do produto vem de campos
+// diferentes em cada um (id vs produto_id), tratado no onAdicionar do
+// componente pai.
+function CartaoProduto({
+  produto, qtdNoCarrinho, onAdicionar,
+}: { produto: Produto | ProdutoMaisVendido; qtdNoCarrinho: number; onAdicionar: () => void }) {
+  const preco = produto.preco_venda ?? produto.custo_medio;
+  return (
+    <button
+      onClick={onAdicionar}
+      className="relative w-[122px] shrink-0 rounded-xl border p-2.5 flex flex-col items-center text-center gap-1 hover:border-[var(--cor-acento)] transition-colors"
+      style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)" }}
+    >
+      {produto.imagem_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={produto.imagem_url} alt="" className="w-12 h-12 rounded-lg object-cover" />
+      ) : (
+        <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--cor-superficie)" }}>
+          <Package size={20} style={{ color: "var(--cor-texto-muted)" }} />
+        </div>
+      )}
+      <div className="text-xs font-semibold leading-tight line-clamp-2 min-h-[2.2em]">{produto.nome}</div>
+      <div className="font-mono font-bold text-sm" style={{ color: "var(--cor-acento-soft, var(--cor-acento))" }}>
+        R$ {preco.toFixed(2)}
+      </div>
+      {qtdNoCarrinho > 0 ? (
+        <span
+          className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center"
+          style={{ background: "var(--cor-acento-soft, var(--cor-acento))", color: "#062018" }}
+        >
+          {qtdNoCarrinho}
+        </span>
+      ) : (
+        <span
+          className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-lg font-bold flex items-center justify-center"
+          style={{ background: "var(--cor-acento)", color: "#062018" }}
+        >
+          +
+        </span>
+      )}
+    </button>
+  );
 }
