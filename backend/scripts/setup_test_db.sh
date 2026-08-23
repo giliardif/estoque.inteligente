@@ -76,6 +76,14 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO estoque_app_test;
 GRANT USAGE ON SCHEMA public TO estoque_auth_test;
 GRANT SELECT, INSERT, UPDATE ON users, refresh_tokens TO estoque_auth_test;
 GRANT SELECT, INSERT ON tenants TO estoque_auth_test;
+
+-- estacoes_impressao: lookup de token de estação acontece ANTES de
+-- sabermos o tenant_id (mesma situação estrutural do login) — precisa da
+-- mesma exceção de bypass RLS. UPDATE é só para o heartbeat
+-- (ultima_atividade_em); nunca INSERT/DELETE aqui, pois registrar e
+-- revogar uma estação são sempre feitos pelo role de aplicação normal
+-- (sujeito a RLS), autenticado por JWT de usuário admin.
+GRANT SELECT, UPDATE ON estacoes_impressao TO estoque_auth_test;
 SQL
 
 echo "==> Pronto. Exporte estas variáveis antes de rodar pytest:"

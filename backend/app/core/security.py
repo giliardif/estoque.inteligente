@@ -2,6 +2,8 @@
 Segurança: hashing de senha (argon2), emissão/validação de JWT,
 e dependência de autenticação com escopo de tenant.
 """
+import hashlib
+import hmac
 import secrets
 
 from datetime import datetime, timedelta, timezone
@@ -72,6 +74,38 @@ def hash_refresh_token(token_bruto: str) -> str:
 
 def verificar_refresh_token(token_bruto: str, token_hash: str) -> bool:
     return pwd_context.verify(token_bruto, token_hash)
+
+
+def gerar_token_estacao_bruto() -> str:
+    """Token opaco de alta entropia entregue UMA VEZ ao admin no registro
+    da estação — o backend nunca guarda o valor bruto, só o hash de lookup."""
+    return secrets.token_urlsafe(48)
+
+
+def hash_lookup_token_estacao(token_bruto: str) -> str:
+    """HMAC-SHA256 determinístico (chaveado com SECRET_KEY), não argon2.
+
+    Diferente de refresh_tokens de usuário (verificados raramente, só no
+    login/renovação), o token de estação é checado a cada ciclo de
+    polling (5-8s) de CADA estação ativa — rodar argon2.verify em loop
+    contra todas as linhas do banco a cada poll não escala com o número
+    de tenants/estações. HMAC permite lookup indexado O(1) por igualdade
+    exata (`WHERE token_lookup_hash = :hash`), com segurança prática
+    equivalente: impossível forjar sem conhecer a SECRET_KEY do servidor.
+    """
+    return hmac.new(
+        settings.SECRET_KEY.encode(), token_bruto.encode(), hashlib.sha256
+    ).hexdigest()
+
+
+class CurrentEstacao(BaseModel):
+    """Identidade de uma Estação de Impressão autenticada — nunca carrega
+    perfil/permissão de usuário humano, só o escopo mínimo (tenant + a
+    própria estação) que os endpoints de fila precisam."""
+
+    id: UUID
+    tenant_id: UUID
+    nome: str
 
 
 class TokenPayload(BaseModel):

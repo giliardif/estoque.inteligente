@@ -4,6 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { X, Printer } from "lucide-react";
 import { EtiquetaConfig, ItemProdutoLista } from "@/lib/types";
 import { EtiquetaLabel } from "./EtiquetaLabel";
+import { EnviarParaEstacaoBotao } from "@/components/estacoes/EnviarParaEstacaoBotao";
+import { useQzTray } from "@/lib/useQzTray";
 
 type Props = {
   produto: ItemProdutoLista;
@@ -25,16 +27,42 @@ const CONFIG_RAPIDA: EtiquetaConfig = {
  * Caso de uso de 1 produto só, sem precisar ir pra tela Etiquetas em
  * lote — reaproveita o mesmo EtiquetaLabel, só que com um formulário
  * mínimo (tipo de código + cópias) em vez do configurador completo.
+ *
+ * Duas formas de imprimir: "Neste dispositivo" (diálogo de impressão do
+ * navegador, como sempre foi) ou "Enviar pra uma estação" (fila mediada
+ * pelo backend — o caminho pra celular ou qualquer PC sem impressora
+ * conectada, Etapa 36). O padrão inicial segue o que o QZ Tray detecta
+ * nesta máquina: se detectado, provavelmente é um PC de balcão com
+ * impressora local; senão, é mais provável que seja mobile.
  */
 export function GerarEtiquetaRapidaDialog({ produto, onFechar }: Props) {
   const [tipoCodigo, setTipoCodigo] = useState<EtiquetaConfig["tipoCodigo"]>("barras");
   const [copias, setCopias] = useState(1);
   const gradeRef = useRef<HTMLDivElement>(null);
+  const { status: statusQzTray } = useQzTray();
+  const [destino, setDestino] = useState<"dispositivo" | "estacao">("dispositivo");
 
   const config = useMemo<EtiquetaConfig>(() => ({ ...CONFIG_RAPIDA, tipoCodigo }), [tipoCodigo]);
 
+  // Ajusta o padrão uma vez, assim que soubermos se este dispositivo tem
+  // QZ Tray local — não sobrescreve se a pessoa já trocou manualmente.
+  const [destinoAjustado, setDestinoAjustado] = useState(false);
+  if (!destinoAjustado && statusQzTray === "indisponivel") {
+    setDestino("estacao");
+    setDestinoAjustado(true);
+  } else if (!destinoAjustado && statusQzTray === "conectado") {
+    setDestinoAjustado(true);
+  }
+
   function imprimir() {
     window.print();
+  }
+
+  function montarHtmlParaFila(): string {
+    return `<!doctype html><html><head><meta charset="utf-8"><style>
+      body{margin:0;font-family:Manrope,Arial,sans-serif;}
+      .grade{display:grid;grid-template-columns:repeat(2,1fr);gap:2mm;padding:4mm;}
+    </style></head><body><div class="grade">${gradeRef.current?.innerHTML ?? ""}</div></body></html>`;
   }
 
   return (
@@ -109,13 +137,39 @@ export function GerarEtiquetaRapidaDialog({ produto, onFechar }: Props) {
             />
           </div>
 
-          <button
-            onClick={imprimir}
-            className="w-full flex items-center justify-center gap-1.5 rounded-md py-2 text-sm font-bold"
-            style={{ background: "var(--cor-acento)", color: "#06231a" }}
-          >
-            <Printer size={14} /> Imprimir
-          </button>
+          <div className="mb-3 flex gap-1.5">
+            {(["dispositivo", "estacao"] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setDestino(d)}
+                className="flex-1 rounded-md border py-1.5 text-xs font-semibold"
+                style={
+                  destino === d
+                    ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
+                    : { borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }
+                }
+              >
+                {d === "dispositivo" ? "Neste dispositivo" : "Enviar pra estação"}
+              </button>
+            ))}
+          </div>
+
+          {destino === "dispositivo" ? (
+            <button
+              onClick={imprimir}
+              className="w-full flex items-center justify-center gap-1.5 rounded-md py-2 text-sm font-bold"
+              style={{ background: "var(--cor-acento)", color: "#06231a" }}
+            >
+              <Printer size={14} /> Imprimir
+            </button>
+          ) : (
+            <EnviarParaEstacaoBotao
+              titulo={produto.nome}
+              quantidade={copias}
+              produtoId={produto.id}
+              obterHtml={montarHtmlParaFila}
+            />
+          )}
         </div>
       </div>
 

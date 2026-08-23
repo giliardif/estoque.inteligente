@@ -447,3 +447,41 @@ export type EtiquetaModelo = {
   criado_em: string;
   atualizado_em: string;
 };
+
+// ===== Estações de Impressão (Etapa 36) =====
+
+export type EstacaoImpressao = {
+  id: string;
+  nome: string;
+  impressora_nome: string;
+  online: boolean;
+  ultima_atividade_em: string | null;
+  criado_em: string;
+};
+
+export type EstacaoImpressaoRegistrada = EstacaoImpressao & {
+  token: string;
+};
+
+export type StatusJobImpressao = "pendente" | "impresso" | "erro";
+
+export type JobImpressao = {
+  id: string;
+  estacao_id: string;
+  estacao_nome: string;
+  produto_id: string | null;
+  titulo: string;
+  quantidade: number;
+  status: StatusJobImpressao;
+  enviado_por_nome: string | null;
+  criado_em: string;
+  atualizado_em: string;
+};
+
+export type JobImpressaoPendente = {
+  id: string;
+  titulo: string;
+  quantidade: number;
+  payload_json: { html?: string };
+  criado_em: string;
+};

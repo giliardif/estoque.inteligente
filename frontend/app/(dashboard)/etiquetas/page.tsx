@@ -8,6 +8,7 @@ import { EtiquetaLabel } from "@/components/etiquetas/EtiquetaLabel";
 import { Search, X, Save, Printer, FileDown, ScanBarcode, Download } from "lucide-react";
 import { ScannerCodigo } from "@/components/scanner/ScannerCodigo";
 import { useQzTray } from "@/lib/useQzTray";
+import { EnviarParaEstacaoBotao } from "@/components/estacoes/EnviarParaEstacaoBotao";
 
 const CONFIG_PADRAO: EtiquetaConfig = {
   elementos: { nome: true, sku: true, preco: true, marca: false },
@@ -29,6 +30,7 @@ export default function EtiquetasPage() {
   const [selecionados, setSelecionados] = useState<ItemSelecionado[]>([]);
   const [buscaAdicionar, setBuscaAdicionar] = useState("");
   const [scannerAberto, setScannerAberto] = useState(false);
+  const [mostrarEnvioEstacao, setMostrarEnvioEstacao] = useState(false);
 
   const [config, setConfig] = useState<EtiquetaConfig>(CONFIG_PADRAO);
   const { status: statusQzTray, impressoras: impressorasQzTray, conectar: reconectarQzTray, imprimirHtml } = useQzTray();
@@ -473,6 +475,31 @@ export default function EtiquetasPage() {
               <Printer size={13} /> {imprimindo ? "Imprimindo..." : "Imprimir etiquetas"}
             </button>
           </div>
+
+          <button
+            disabled={grade.length === 0}
+            onClick={() => setMostrarEnvioEstacao((v) => !v)}
+            className="mt-2 w-full text-center text-[11px] underline underline-offset-2 disabled:opacity-40"
+            style={{ color: "var(--cor-texto-muted)" }}
+          >
+            {mostrarEnvioEstacao ? "Ocultar envio pra estação" : "Ou enviar pra uma estação de impressão"}
+          </button>
+
+          {mostrarEnvioEstacao && grade.length > 0 && (
+            <div className="mt-2.5">
+              <EnviarParaEstacaoBotao
+                titulo={selecionados.length === 1 ? selecionados[0].produto.nome : `Lote de ${selecionados.length} produtos`}
+                quantidade={totalEtiquetas}
+                produtoId={selecionados.length === 1 ? selecionados[0].produto.id : null}
+                obterHtml={() =>
+                  `<!doctype html><html><head><meta charset="utf-8"><style>
+                    body{margin:0;font-family:Manrope,Arial,sans-serif;}
+                    .grade{display:grid;grid-template-columns:repeat(${config.colunas},1fr);gap:${config.espacamentoMm}mm;padding:${config.margemMm}mm;}
+                  </style></head><body><div class="grade">${gradeImpressaoRef.current?.innerHTML ?? ""}</div></body></html>`
+                }
+              />
+            </div>
+          )}
         </div>
       </div>
 

@@ -254,3 +254,45 @@ class EtiquetaModelo(Base):
     config_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class EstacaoImpressao(Base):
+    """Representa um PC físico com impressora conectada, rodando QZ Tray +
+    a tela de Estação de Impressão em segundo plano. Autenticada por um
+    token opaco próprio (token_lookup_hash), desacoplado da sessão do
+    usuário que a registrou — ver migration 013 para o racional completo."""
+
+    __tablename__ = "estacoes_impressao"
+    id: Mapped[uuid.UUID] = _uuid_col()
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"))
+    nome: Mapped[str] = mapped_column(String(120))
+    impressora_nome: Mapped[str] = mapped_column(String(200))
+    token_lookup_hash: Mapped[str] = mapped_column(Text)
+    criado_por: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    revogado: Mapped[bool] = mapped_column(Boolean, default=False)
+    revogado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ultima_atividade_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class FilaImpressao(Base):
+    """Um job de impressão. payload_json carrega o HTML pronto (mesmo
+    formato usado pelo QZ Tray em modo pixel/html desde a Etapa 33) +
+    metadados leves de exibição na fila/log."""
+
+    __tablename__ = "filas_impressao"
+    id: Mapped[uuid.UUID] = _uuid_col()
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"))
+    estacao_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("estacoes_impressao.id", ondelete="CASCADE")
+    )
+    produto_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("produtos.id"))
+    titulo: Mapped[str] = mapped_column(String(200))
+    quantidade: Mapped[int] = mapped_column(default=1)
+    payload_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente | impresso | erro
+    enviado_por: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    job_origem_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("filas_impressao.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

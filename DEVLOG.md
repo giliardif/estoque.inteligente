@@ -2733,3 +2733,136 @@ rodada de verdade — **216/216 passando** + 6 isolados do
 - Sem validação de saldo em tempo real no PDV ao adicionar ao carrinho
   (mesma limitação de antes desta etapa — a validação real acontece no
   `POST /vendas`, que já bloqueia com 409 se o saldo for insuficiente).
+
+
+## Etapa 36 — Estações de Impressão (impressão mediada pelo backend)
+
+Item de backlog novo, mapeado inteiramente por preview HTML interativo
+(múltiplas iterações aprovadas em conversa) antes de qualquer código,
+seguindo o padrão já estabelecido. Motivação: o sistema também vai ser
+usado via mobile, e celular não tem como rodar QZ Tray — então o
+dispositivo que pede a impressão nunca fala direto com a impressora;
+ele grava um job numa fila, e um PC fixo com impressora conectada (a
+"Estação"), rodando QZ Tray e com a tela aberta, puxa a fila via
+polling e imprime localmente.
+
+**Decisão de arquitetura mais importante: token de estação desacoplado
+da sessão de usuário.** Uma Estação de Impressão fica rodando sozinha
+por horas/dias sem interação humana — se ela dependesse do JWT do admin
+que a registrou, qualquer logout/expiração/troca de senha em QUALQUER
+dispositivo derrubaria a impressão. A estação recebe, no registro, um
+token opaco próprio (`secrets.token_urlsafe(48)`), guardado no
+`localStorage` do navegador que fez o registro (não em memória, como o
+access token de usuário — aqui a estação PRECISA sobreviver a fechar
+aba/reiniciar navegador). O blast radius de um roubo desse token é
+baixo por natureza (só lê a fila e marca jobs do próprio tenant), o que
+torna esse tradeoff aceitável.
+
+**Lookup do token por HMAC, não argon2 — decisão consciente, diferente
+do padrão de `refresh_tokens`.** O código de `auth/service.py` já
+documentava (desde etapas anteriores) que em escala maior seria preciso
+trocar para HMAC-SHA256 determinístico como índice de lookup, em vez do
+loop `argon2.verify` contra todas as linhas não-revogadas. Refresh
+token é verificado raramente (login/renovação); token de estação é
+verificado a cada ciclo de polling (5-8s) de CADA estação de CADA
+tenant — rodar o loop argon2 nesse volume não escalaria com a base de
+clientes (requisito explícito desta etapa: multi-tenant desde o
+desenho, não só multi-estação). Implementado HMAC-SHA256 chaveado com
+`SECRET_KEY`, índice único, lookup O(1).
+
+**Backend:**
+- Migration `013_estacoes_impressao.sql`: tabelas `estacoes_impressao` e
+  `filas_impressao`, RLS+FORCE nas duas. `estacoes_impressao` tem índice
+  único em `token_lookup_hash` (busca acontece antes de sabermos o
+  tenant, mesma exceção estrutural do login). `filas_impressao` guarda
+  `payload_json` com o HTML pronto (mesmo formato usado pelo QZ Tray
+  desde a Etapa 33) + `job_origem_id` pra rastrear reimpressões.
+- `auth_service` (role bypass RLS) ganhou `SELECT, UPDATE` em
+  `estacoes_impressao` — só o suficiente pro lookup de token e
+  heartbeat; nunca INSERT/DELETE (registrar/revogar sempre passa pelo
+  role de aplicação normal, sujeito a RLS, autenticado por JWT de admin).
+- Módulo `estacoes/` novo: `CurrentEstacao` (identidade mínima, nunca
+  carrega perfil de usuário) autenticada via header próprio
+  `X-Estacao-Token` (não é o `Authorization: Bearer` do usuário).
+  Endpoints admin (registrar/editar/revogar), endpoints de
+  usuário/leitura (listar estações, criar job, listar fila, reimprimir)
+  e endpoints da própria estação (`GET /fila/pendentes` — que também
+  serve de heartbeat —, `POST /fila/{id}/concluir`,
+  `POST /fila/{id}/erro`).
+- **Reimpressão é sempre manual, nunca automática** — decisão explícita
+  do usuário. Um job com erro (ou pendente-sem-resposta) nunca é
+  reenviado sozinho pelo backend: evita imprimir a etiqueta duas vezes
+  se a confirmação de "impresso" simplesmente se perdeu (a estação pode
+  ter imprimido de verdade e só a resposta de volta ter falhado).
+  Reimprimir cria um job NOVO clonando o original; o original não é
+  alterado. Job já impresso não pode ser reimprimido (409) — proteção
+  extra contra clique duplo.
+- Isolamento cross-tenant: tentativa de mandar job pra estação de outro
+  tenant, ou revogar/editar estação de outro tenant, retorna 404 (nunca
+  403) — mesmo padrão do resto do sistema.
+
+**Frontend:**
+- `lib/useEstacaoRuntime.ts`: hook que lê o token salvo em
+  `localStorage`; se presente, conecta no QZ Tray, faz polling da fila
+  a cada 6s (dentro da faixa 5-8s combinada), imprime cada job pendente
+  e marca concluído/erro. Reconexão em foco: se o navegador throttlar o
+  `setInterval` da aba em segundo plano, um listener de
+  `visibilitychange` força um ciclo assim que a aba volta a ficar
+  visível, em vez de esperar o próximo tick regular.
+- Tela `/estacoes` (admin, com item de menu condicional — mesmo padrão
+  de "Usuários"): grid de estações com status online/offline computado
+  em runtime (nunca persistido, mesmo princípio de `margem_percentual`
+  em produtos), editar/revogar por card, fila de impressão completa
+  (tabela no desktop, cards no mobile) com filtro por status, botão
+  Reimprimir por linha, e banner de sugestão quando uma estação
+  reconectada tem job pendente sem resposta (sugere, nunca reimprime
+  sozinho).
+- `RegistrarEstacaoModal.tsx`: detecta QZ Tray via `useQzTray`, lista as
+  impressoras reais do sistema, bloqueia o formulário se o QZ Tray não
+  responder. Registro salva o token retornado (uma única vez) no
+  `localStorage` deste navegador — é isso que faz a aba virar a estação
+  em funcionamento.
+- `EnviarParaEstacaoBotao.tsx`: componente reutilizável usado no fluxo
+  mobile — lista estações online, lembra a última escolhida
+  (`localStorage`), envia o job e acompanha o status por um tempo curto
+  (Enviado → Impresso/Sem resposta). Integrado em
+  `GerarEtiquetaRapidaDialog` (toggle "Neste dispositivo" / "Enviar pra
+  estação", com padrão automático baseado em QZ Tray detectado ou não)
+  e na tela Etiquetas em lote (painel opcional abaixo do botão principal
+  de impressão).
+- Guia `docs/GUIA_CONFIGURACAO_ESTACAO_IMPRESSAO.md`: passo a passo pro
+  tenant instalar QZ Tray, registrar a estação, e (opcional) configurar
+  o navegador pra abrir sozinho no login do PC — cobre exatamente o
+  ponto de "reiniciar o computador não recupera sozinho" identificado
+  na fase de design, que é o único cenário que depende de configuração
+  fora do NexStock.
+
+**Correção durante o desenvolvimento:** `service._serializar_job` foi
+renomeada pra `serializar_job` (pública) — o router precisava chamá-la
+diretamente para reserializar o job depois de `marcar_status`.
+
+**Verificação:** Postgres 16 local recriado do zero, suíte completa
+rodada de verdade — **232/232 passando** (16 testes novos em
+`test_estacoes.py`, cobrindo token desacoplado de sessão, heartbeat,
+isolamento cross-tenant, reimpressão manual/bloqueio de reimpressão de
+job já impresso, e leitura/escrita por perfil). `test_auth.py` isolado:
+sem hang nesta rodada (comportamento intermitente já documentado, não é
+regressão). Bandit: 0 issues, duas rodadas. `tsc --noEmit`: limpo.
+`next build`: limpo — rota `/estacoes` nova em 7.46 kB, `/etiquetas`
+subiu de 7 kB pra 8.65 kB.
+
+**Pendências deixadas explícitas para etapas futuras:**
+- `impressora_nome` usada pelo runtime da estação vem do `localStorage`
+  no momento do registro — se o admin editar a impressora depois (via
+  outro dispositivo), a estação em funcionamento só pega a mudança na
+  próxima vez que for registrada de novo nesse navegador. Resolver
+  exigiria um endpoint de "estação consulta os próprios dados" via
+  token — não crítico pro piloto (uma estação raramente troca de
+  impressora física sem alguém reabrir a aba de qualquer forma).
+- Certificado QZ Tray assinado (popup de segurança na primeira
+  impressão da sessão) continua como pendência das etapas 32-33, não
+  agravada nem resolvida aqui.
+- Permissão de operador gerenciar estações: campo mapeado no design
+  (mencionado ao usuário), mas não implementado — hoje só admin
+  registra/edita/revoga, leitura é liberada pra qualquer perfil
+  autenticado.

@@ -87,12 +87,15 @@ async def get_db_for_tenant(tenant_id: UUID) -> AsyncGenerator[AsyncSession, Non
 # já setado porque ainda não o conhecemos.
 #
 # Mitigação: esta engine conecta como um papel de banco (`auth_service`)
-# com permissão de BYPASSRLS concedida SOMENTE nas tabelas `users` e
-# `refresh_tokens` — nunca em produtos, movimentações, vendas etc.
-# Esse papel deve ser criado assim na migration/infra de produção:
+# com permissão de BYPASSRLS concedida SOMENTE nas tabelas `users`,
+# `refresh_tokens` e `estacoes_impressao` — nunca em produtos, movimentações,
+# vendas etc. Mesma exceção estrutural se aplica ao token de Estação de
+# Impressão (Etapa 36): o token é opaco e precisa ser localizado por hash
+# ANTES de sabermos a qual tenant a estação pertence.
 #
 #   CREATE ROLE auth_service LOGIN PASSWORD '...';
 #   GRANT SELECT, INSERT, UPDATE ON users, refresh_tokens TO auth_service;
+#   GRANT SELECT, UPDATE ON estacoes_impressao TO auth_service;  -- lookup de token + heartbeat
 #   GRANT SELECT, INSERT ON tenants TO auth_service;  -- necessário só no cadastro inicial
 #   ALTER TABLE users ENABLE ROW LEVEL SECURITY;  -- já habilitado
 #   -- BYPASSRLS é concedido via ALTER ROLE, não via GRANT de tabela:
