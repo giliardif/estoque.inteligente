@@ -2898,3 +2898,42 @@ direto, sem simular o preflight do navegador) — por isso o teste
 específico, pra não voltar a escapar silenciosamente.
 
 **Verificação:** suíte completa — 232/232 passando. Bandit: 0 issues.
+
+
+## Correção — Stale closure travava o banner da Estação em "Aguardando QZ Tray responder…" pra sempre
+
+Detectado pelo usuário testando em staging real, depois do fix de CORS
+acima: o card da estação já aparecia Online (heartbeat funcionando), mas
+o banner de status continuava preso em "Aguardando QZ Tray responder…"
+mesmo com o console confirmando `Established connection with QZ Tray`.
+
+**Causa:** clássico stale closure de React. O `useEffect` que monta o
+`setInterval` de polling em `useEstacaoRuntime.ts` só tinha
+`estacaoLocal?.id` como dependência — de propósito, pra não reiniciar o
+intervalo (e desalinhar o cronograma de polling) toda vez que
+`statusQz`/`imprimirHtml` mudassem, o que acontece com frequência normal
+durante a conexão do QZ Tray. Só que isso significa que a função
+`processarFila` capturada pelo `setInterval` ficou congelada com o valor
+de `statusQz` do exato momento em que o efeito rodou pela primeira vez
+— tipicamente `"conectando"`, porque `useQzTray().conectar()` é
+assíncrono e ainda não tinha resolvido. Como o efeito nunca reexecuta, o
+`setInterval` chamava pra sempre essa versão antiga da função, presa
+verificando um `statusQz` que nunca mais seria atualizado — mesmo depois
+do QZ Tray já estar de fato conectado no state React.
+
+**Fix:** `processarFila` (que já é recriada corretamente a cada mudança
+de `statusQz`/`imprimirHtml` via `useCallback`) agora é guardada num
+`useRef` atualizado em efeito próprio; o `setInterval` chama sempre
+`processarFilaRef.current()` em vez de fechar sobre uma cópia fixa da
+função. Isso resolve o stale closure sem reintroduzir o problema de
+reiniciar o intervalo a cada re-render — padrão comum em React pra esse
+tipo de situação (callback estável, mas lendo sempre o valor mais
+recente).
+
+**Verificação:** `tsc --noEmit` e `next build` limpos (mudança é 100%
+frontend, sem tocar backend). Não foi possível escrever um teste
+automatizado direto pra esse bug específico (é uma race condition de
+timing entre efeitos React, mais adequado a um teste de integração com
+Playwright do que unitário — fora do que o sandbox consegue rodar aqui,
+mesma limitação de headless já documentada). Validação real feita pelo
+usuário em staging.

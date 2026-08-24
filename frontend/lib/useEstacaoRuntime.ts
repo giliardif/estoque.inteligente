@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useQzTray } from "@/lib/useQzTray";
+import { useCallback, useEffect, useRef, useState } from "react";import { useQzTray } from "@/lib/useQzTray";
 import {
   buscarJobsPendentes,
   concluirJobComoEstacao,
@@ -114,16 +113,27 @@ export function useEstacaoRuntime() {
     }
   }, [estacaoLocal, statusQz, imprimirHtml]);
 
+  // Fix de stale closure: o setInterval abaixo só reinicia quando a
+  // ESTAÇÃO muda (não a cada mudança de statusQz/imprimirHtml, que
+  // mudam com frequência normal — reiniciar o interval toda hora
+  // atrapalharia o cronograma de polling). Por isso ele chama sempre a
+  // versão mais recente de processarFila via ref, em vez de fechar sobre
+  // uma cópia congelada da função pega no momento em que o efeito rodou.
+  const processarFilaRef = useRef(processarFila);
+  useEffect(() => {
+    processarFilaRef.current = processarFila;
+  }, [processarFila]);
+
   useEffect(() => {
     if (!estacaoLocal) return;
-    processarFila();
-    const intervalo = setInterval(processarFila, INTERVALO_POLLING_MS);
+    processarFilaRef.current();
+    const intervalo = setInterval(() => processarFilaRef.current(), INTERVALO_POLLING_MS);
 
     // Reconexão em foco: se o navegador jogou a aba pra segundo plano e
     // throttlou o setInterval, força um ciclo assim que a aba volta a
     // ficar visível, em vez de esperar o próximo tick regular.
     const aoVoltarFoco = () => {
-      if (document.visibilityState === "visible") processarFila();
+      if (document.visibilityState === "visible") processarFilaRef.current();
     };
     document.addEventListener("visibilitychange", aoVoltarFoco);
 
@@ -131,7 +141,6 @@ export function useEstacaoRuntime() {
       clearInterval(intervalo);
       document.removeEventListener("visibilitychange", aoVoltarFoco);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estacaoLocal?.id]);
 
   return {
