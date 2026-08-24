@@ -2866,3 +2866,35 @@ subiu de 7 kB pra 8.65 kB.
   (mencionado ao usuário), mas não implementado — hoje só admin
   registra/edita/revoga, leitura é liberada pra qualquer perfil
   autenticado.
+
+
+## Correção — CORS bloqueava o header de token da Estação em produção
+
+Detectado pelo usuário ao testar a Etapa 36 de verdade: a estação
+registrada ficava presa em "Iniciando…" pra sempre, sem erro visível, e
+nunca saía de Offline (`Última atividade: nunca`).
+
+**Causa:** `CORSMiddleware` em `main.py` tinha
+`allow_headers=["Authorization", "Content-Type"]` — sem `X-Estacao-Token`,
+o header custom que a Estação usa pra se autenticar (ver Etapa 36).
+Como frontend (Vercel) e backend (Railway) são domínios diferentes, todo
+`fetch` com esse header dispara um preflight `OPTIONS` antes da chamada
+real; o preflight era rejeitado pelo CORS, o navegador bloqueava a
+chamada de verdade *antes* dela sair, e o `fetch` falhava com uma
+exceção genérica (não um erro HTTP normal). No `useEstacaoRuntime`, essa
+exceção não era um `EstacaoTokenError`, então caía no bloco de captura
+sem nunca atualizar o `status` — ficava travado em `"inativo"`
+("Iniciando…") indefinidamente, e o heartbeat nunca chegava a bater no
+backend (dai o Offline persistente).
+
+**Fix:** adicionado `"X-Estacao-Token"` em `allow_headers`.
+
+**Teste de regressão:** `test_cors_permite_header_de_token_de_estacao`
+em `test_estacoes.py` — dispara um preflight `OPTIONS` real contra
+`/estacoes/fila/pendentes` com `Access-Control-Request-Headers:
+x-estacao-token` e confirma que a resposta libera o header. Esse tipo de
+bug é fácil de não pegar em teste funcional normal (que chama a rota
+direto, sem simular o preflight do navegador) — por isso o teste
+específico, pra não voltar a escapar silenciosamente.
+
+**Verificação:** suíte completa — 232/232 passando. Bandit: 0 issues.

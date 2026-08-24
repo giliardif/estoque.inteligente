@@ -262,7 +262,21 @@ async def test_leitura_nao_pode_criar_job_impressao(client_leitura: AsyncClient,
 
 
 @pytest.mark.asyncio
-async def test_criar_job_para_estacao_revogada_falha(client_tenant_a: AsyncClient):
+async def test_cors_permite_header_de_token_de_estacao(client_tenant_a: AsyncClient):
+    """Regressão: o preflight CORS precisa liberar X-Estacao-Token, senão
+    o navegador bloqueia a chamada da estação silenciosamente (sem erro
+    visível pro usuário) sempre que frontend e backend estão em domínios
+    diferentes — exatamente o caso de Vercel + Railway em produção."""
+    resp = await client_tenant_a.options(
+        "/api/v1/estacoes/fila/pendentes",
+        headers={
+            "Origin": "https://staging.exemplo.com",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "x-estacao-token",
+        },
+    )
+    permitidos = resp.headers.get("access-control-allow-headers", "").lower()
+    assert "x-estacao-token" in permitidos
     estacao = await _registrar_estacao(client_tenant_a)
     await client_tenant_a.post(f"/api/v1/estacoes/{estacao['id']}/revogar")
 
