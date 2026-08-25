@@ -2937,3 +2937,26 @@ timing entre efeitos React, mais adequado a um teste de integração com
 Playwright do que unitário — fora do que o sandbox consegue rodar aqui,
 mesma limitação de headless já documentada). Validação real feita pelo
 usuário em staging.
+
+
+## Etapa 36 — Notas Fiscais: redesign de UX (painel de detalhe unificado)
+
+**Contexto:** o usuário trouxe uma referência visual externa (mockup de outro produto) pedindo uma melhoria na tela de Notas Fiscais. Antes de tocar em código, o módulo real foi auditado (`backend/app/modules/notas_fiscais/*`, `frontend/app/(dashboard)/notas/page.tsx`) — a referência assumia campos que não existem no schema atual (`valor_total` por nota, série, snapshot de saldo antes/depois por item, DANFE, observações). Foram apresentadas duas propostas de mockup interativo lado a lado (Proposta A — só UX sobre os dados reais; Proposta B — UX + campos novos no banco) e o usuário escolheu a Proposta A para esta etapa.
+
+**O que foi feito (100% frontend, zero mudança de schema/endpoint):**
+- Seção de itens da nota, que antes ficava abaixo da tabela e empurrava a página, virou um **painel de detalhe unificado** ao lado da tabela (desktop, `lg:sticky`) e um **bottom sheet** no mobile (`fixed inset-x-0 bottom-0`, com overlay que fecha ao clicar fora)
+- Estado de carregamento próprio para os itens da nota selecionada (`carregandoItens`), independente do carregamento da tabela — evita a tela inteira re-renderizar como loading ao trocar de nota
+- Badge de status da nota (`StatusBadge`) extraída como componente e reaplicada tanto na tabela quanto no cabeçalho do painel — antes só existia inline na versão mobile
+- Botão de fechar explícito no painel de detalhe (ícone `X`) além do atalho `Esc` já existente
+- Ao importar um XML novo, o painel de detalhe já abre automaticamente mostrando os itens recém-importados (antes disso ficava implícito, sem estado de loading dedicado)
+- Extraído `EstadoVazio` como componente para não duplicar a mesma condição em dois lugares
+
+**Decisão de escopo confirmada com o usuário:** os ganhos mais vistosos da referência (valor total por nota, impacto "antes → depois" por item) foram deliberadamente deixados de fora — dependem de mudança de schema e foram mapeados como parte da fundação da camada inteligente (ver `docs/CAMADA_INTELIGENTE_MAPEAMENTO.md`), não implementados aqui.
+
+**Verificação:**
+- `tsc --noEmit`: limpo
+- `next build`: limpo (rota `/notas` compila normalmente)
+- Suíte backend completa (sem mudança de schema, mas rodada por padrão): 232/232 passando + `test_auth.py` isolado (6/6)
+- Bandit: 0 issues (nenhum arquivo `.py` alterado nesta etapa)
+
+**Entregável:** arquivo alterado `frontend/app/(dashboard)/notas/page.tsx` + novo documento `docs/CAMADA_INTELIGENTE_MAPEAMENTO.md` (planejamento, sem código) + zip completo do projeto.
