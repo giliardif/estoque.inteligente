@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_BUCKET: str = "produtos-imagens"
     MAX_IMAGEM_PRODUTO_SIZE_MB: int = 3
 
+    # Supabase Storage — foto de perfil de usuário (Etapa 37). Bucket
+    # separado do de produtos (buckets públicos distintos por tipo de
+    # conteúdo, mesmo padrão de path por tenant_id/usuario_id não
+    # adivinhável). ATENÇÃO: bucket precisa ser criado manualmente no
+    # Supabase Storage antes de funcionar em staging/produção — mesma
+    # exigência que já existia pra SUPABASE_STORAGE_BUCKET.
+    SUPABASE_STORAGE_BUCKET_AVATARES: str = "usuarios-avatares"
+    MAX_IMAGEM_AVATAR_SIZE_MB: int = 2
+
     # Import de produtos em massa via planilha (Etapa 26). Limites conservadores
     # de propósito: evita DoS por planilha gigante (linha a linha é validada em
     # memória, sem streaming pro banco até a confirmação).

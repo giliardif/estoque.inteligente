@@ -64,7 +64,23 @@ export async function apiFetch<T>(
     let detalhe = "Erro inesperado. Tente novamente.";
     try {
       const corpo = await resp.json();
-      detalhe = corpo.detail || detalhe;
+      if (typeof corpo.detail === "string") {
+        detalhe = corpo.detail;
+      } else if (Array.isArray(corpo.detail)) {
+        // Erros de validação do Pydantic (ex.: CNPJ inválido, nome muito
+        // curto) chegam como lista de objetos {loc, msg, type}, não como
+        // string. Sem isso, `detalhe` viraria esse array e qualquer
+        // componente que renderiza {erro} direto quebraria (React não
+        // renderiza array de objetos como filho). Extrai só as mensagens.
+        // Pydantic v2 prefixa ValueError de field_validator com
+        // "Value error, " — removido aqui, é ruído de implementação que
+        // não deveria aparecer pro usuário final.
+        detalhe =
+          corpo.detail
+            .map((d: { msg?: string }) => d.msg?.replace(/^Value error,\s*/i, ""))
+            .filter(Boolean)
+            .join(" ") || detalhe;
+      }
     } catch {
       /* resposta sem corpo JSON — mantém mensagem genérica */
     }

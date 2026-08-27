@@ -14,6 +14,7 @@ class UsuarioOut(BaseModel):
     email: str
     perfil: str
     ativo: bool
+    avatar_url: str | None = None
     criado_em: datetime
 
 
@@ -33,6 +34,15 @@ class UsuarioCreate(BaseModel):
 class UsuarioCreateResult(BaseModel):
     usuario: UsuarioOut
     senha_provisoria: str  # exibida apenas nesta resposta — nunca fica recuperável depois
+
+
+class UsuarioMeUpdate(BaseModel):
+    """Separado de UsuarioUpdate de propósito: são superfícies de permissão
+    diferentes (autoatendimento vs. admin gerenciando outro usuário) — um
+    campo `nome` aqui nunca deve ganhar `perfil`/`ativo` por engano só
+    porque parece "mais completo"."""
+
+    nome: str = Field(min_length=2, max_length=200)
 
 
 class UsuarioUpdate(BaseModel):

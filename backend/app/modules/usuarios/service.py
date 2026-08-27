@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import gerar_senha_provisoria, hash_password
 from app.db.models import User
-from app.modules.usuarios.schemas import UsuarioCreate, UsuarioUpdate
+from app.modules.usuarios.schemas import UsuarioCreate, UsuarioMeUpdate, UsuarioUpdate
 
 
 async def listar(db: AsyncSession, *, tenant_id: UUID):
@@ -79,3 +79,28 @@ async def atualizar(
     await db.commit()
     await db.refresh(alvo)
     return alvo
+
+
+async def obter_por_id(db: AsyncSession, *, tenant_id: UUID, usuario_id: UUID) -> User:
+    usuario = (
+        await db.execute(select(User).where(User.id == usuario_id, User.tenant_id == tenant_id))
+    ).scalar_one_or_none()
+    if not usuario:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado.")
+    return usuario
+
+
+async def atualizar_meus_dados(db: AsyncSession, *, tenant_id: UUID, usuario_id: UUID, dados: UsuarioMeUpdate) -> User:
+    usuario = await obter_por_id(db, tenant_id=tenant_id, usuario_id=usuario_id)
+    usuario.nome = dados.nome
+    await db.commit()
+    await db.refresh(usuario)
+    return usuario
+
+
+async def definir_avatar(db: AsyncSession, *, tenant_id: UUID, usuario_id: UUID, avatar_url: str) -> User:
+    usuario = await obter_por_id(db, tenant_id=tenant_id, usuario_id=usuario_id)
+    usuario.avatar_url = avatar_url
+    await db.commit()
+    await db.refresh(usuario)
+    return usuario

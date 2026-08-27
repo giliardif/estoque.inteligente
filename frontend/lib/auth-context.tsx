@@ -18,6 +18,7 @@ type AuthContextType = {
   login: (email: string, senha: string) => Promise<void>;
   logout: () => Promise<void>;
   marcarSenhaTrocada: () => void;
+  atualizarNome: (nome: string) => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -57,6 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsuario((atual) => (atual ? { ...atual, deve_trocar_senha: false } : atual));
   }
 
+  // Reflete o novo nome imediatamente na UI (ex.: saudação da Home) sem
+  // esperar o próximo login/refresh — o token em si só é reemitido nesses
+  // momentos, mesma limitação já documentada para outros campos do JWT.
+  function atualizarNome(nome: string) {
+    setUsuario((atual) => (atual ? { ...atual, nome } : atual));
+  }
+
   async function logout() {
     await apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
     definirAccessToken(null);
@@ -65,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, carregando, login, logout, marcarSenhaTrocada }}>
+    <AuthContext.Provider value={{ usuario, carregando, login, logout, marcarSenhaTrocada, atualizarNome }}>
       {children}
     </AuthContext.Provider>
   );

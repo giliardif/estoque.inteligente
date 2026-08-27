@@ -24,6 +24,7 @@ class Tenant(Base):
     id: Mapped[uuid.UUID] = _uuid_col()
     nome: Mapped[str] = mapped_column(String(200))
     segmento_slug: Mapped[str] = mapped_column(String(50))
+    cnpj: Mapped[str | None] = mapped_column(String(18))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
@@ -39,6 +40,7 @@ class User(Base):
     deve_trocar_senha: Mapped[bool] = mapped_column(Boolean, default=False)
     tentativas_falhas: Mapped[int] = mapped_column(default=0)
     bloqueado_ate: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    avatar_url: Mapped[str | None] = mapped_column(Text)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 

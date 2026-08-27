@@ -9,7 +9,7 @@ import { useTheme } from "@/lib/theme/useTheme";
 import ToggleTema from "@/components/ui/ToggleTema";
 import {
   LayoutGrid, Package, Boxes, ArrowLeftRight, ClipboardList, FileText,
-  BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X, Users, Tag, Printer,
+  BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X, Tag, Settings,
 } from "lucide-react";
 
 const nav = [
@@ -24,14 +24,7 @@ const nav = [
   { href: "/compras", label: "Compras", icon: ShoppingBag },
   { href: "/alertas", label: "Alertas", icon: Bell },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
-];
-
-// Itens exibidos só para admin — a proteção real é o backend (403 para
-// operador/leitura em ações de escrita), este filtro é só para não
-// anunciar telas que o usuário não vai conseguir gerenciar.
-const navAdmin = [
-  { href: "/usuarios", label: "Usuários", icon: Users },
-  { href: "/estacoes", label: "Estações de Impressão", icon: Printer },
+  { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 function LogoBloco({ tema }: { tema: ReturnType<typeof useTheme> }) {
@@ -111,7 +104,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   if (!usuario) return null;
 
-  const itensNav = usuario.perfil === "admin" ? [...nav, ...navAdmin] : nav;
+  const itensNav = nav;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">

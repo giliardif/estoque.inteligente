@@ -414,7 +414,15 @@ export type Usuario = {
   email: string;
   perfil: Perfil;
   ativo: boolean;
+  avatar_url: string | null;
   criado_em: string;
+};
+
+export type Tenant = {
+  id: string;
+  nome: string;
+  segmento_slug: string;
+  cnpj: string | null;
 };
 
 export type UsuarioCreateResult = {
