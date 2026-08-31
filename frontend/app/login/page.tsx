@@ -59,7 +59,7 @@ export default function LoginPage() {
           ) : null}
           <div className="text-center leading-tight">
             <div className="font-logotype text-2xl font-bold tracking-tight">
-              <span style={{ color: "var(--cor-texto)" }}>Nex</span>
+              <span style={{ color: "var(--cor-texto)" }}>Giro</span>
               <span style={{ color: "var(--cor-acento)" }}>Stock</span>
             </div>
             {tema.logo_tagline ? (

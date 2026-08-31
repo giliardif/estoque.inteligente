@@ -5,7 +5,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sistema de Gestão de Estoque",
+  title: "Girostock — Estoque em Movimento",
   description: "Gestão inteligente de estoque — multi-segmento",
 };
 

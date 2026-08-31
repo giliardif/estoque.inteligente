@@ -490,7 +490,7 @@ export default function VendasPage() {
             2ª aba quando o módulo existir), desabilitado por enquanto. */}
         <button
           disabled
-          title="Em breve — abertura/fechamento de caixa ainda não existe no NexStock"
+          title="Em breve — abertura/fechamento de caixa ainda não existe no Girostock"
           className="hidden sm:flex items-center gap-3 rounded-xl border px-4 py-3 opacity-50 cursor-not-allowed"
           style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}
         >

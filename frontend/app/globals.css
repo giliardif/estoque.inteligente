@@ -2,10 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500..700&family=Manrope:wght@400;500;600;700;800&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap");
 
-/* Reservada só para o logotipo "NexStock" (login e sidebar) — nunca usada
+/* Reservada só para o logotipo "Girostock" (login e sidebar) — nunca usada
    como fonte de corpo ou display do produto, conforme o manual de marca. */
 .font-logotype {
   font-family: "Poppins", sans-serif;
@@ -21,13 +20,13 @@ body {
   margin: 0;
   background: var(--cor-base, #0d182a);
   color: var(--cor-texto, #f3f4f6);
-  font-family: var(--fonte-corpo, "Manrope"), sans-serif;
+  font-family: var(--fonte-corpo, "Inter"), sans-serif;
 }
 
 h1,
 h2,
 h3 {
-  font-family: var(--fonte-display, "Fraunces"), serif;
+  font-family: var(--fonte-display, "Poppins"), sans-serif;
 }
 
 a {

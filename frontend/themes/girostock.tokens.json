@@ -3,7 +3,7 @@
   "modos": {
     "escuro": {
       "cor_base": "#0D182A",
-      "cor_superficie": "#1B263B",
+      "cor_superficie": "#112D4E",
       "cor_acento": "#10B981",
       "cor_acento_soft": "#34D399",
       "cor_sucesso": "#10B981",
@@ -54,10 +54,10 @@
       "cor_marca_gradiente_para": "#059669"
     }
   },
-  "fonte_display": "Fraunces",
-  "fonte_corpo": "Manrope",
-  "logo_texto": "NexStock",
-  "logo_tagline": "Estoque Inteligente",
-  "logo_simbolo": "/brand/nexstock-symbol.png",
-  "logo_completo": "/brand/nexstock-logo-full.png"
+  "fonte_display": "Poppins",
+  "fonte_corpo": "Inter",
+  "logo_texto": "Girostock",
+  "logo_tagline": "Estoque em Movimento",
+  "logo_simbolo": "/brand/girostock-symbol.png",
+  "logo_completo": "/brand/girostock-logo-full.png"
 }

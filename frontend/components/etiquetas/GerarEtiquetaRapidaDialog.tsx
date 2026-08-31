@@ -60,7 +60,7 @@ export function GerarEtiquetaRapidaDialog({ produto, onFechar }: Props) {
 
   function montarHtmlParaFila(): string {
     return `<!doctype html><html><head><meta charset="utf-8"><style>
-      body{margin:0;font-family:Manrope,Arial,sans-serif;}
+      body{margin:0;font-family:Inter,Arial,sans-serif;}
       .grade{display:grid;grid-template-columns:repeat(2,1fr);gap:2mm;padding:4mm;}
     </style></head><body><div class="grade">${gradeRef.current?.innerHTML ?? ""}</div></body></html>`;
   }

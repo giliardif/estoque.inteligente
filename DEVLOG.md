@@ -3009,3 +3009,31 @@ Esta entrada cobre só o **backend** das 3 pendências identificadas (Empresa, n
 - Suíte backend re-confirmada: 249/249 (+ 6/6 `test_auth.py` isolado)
 
 **Entregável:** arquivos novos (`app/(dashboard)/configuracoes/page.tsx`, `components/configuracoes/*`, `lib/api-tenant.ts`, `lib/api-conta.ts`) + arquivos alterados (`app/(dashboard)/layout.tsx`, `app/(dashboard)/usuarios/page.tsx` e `estacoes/page.tsx` — agora redirects —, `lib/api.ts`, `lib/auth-context.tsx`, `lib/types.ts`) + zip completo do projeto. Etapa 37 encerrada — próxima pendência de produto é o bucket `usuarios-avatares` precisar ser criado manualmente no Supabase Storage antes do upload de foto funcionar de ponta a ponta em staging/produção (documentado desde a parte de backend).
+
+---
+
+## Etapa 38 — Rebranding: NexStock → Girostock
+
+**Motivo:** "NexStock" tinha conflito real de marca com uma empresa já existente no mesmo segmento (gestão de estoque/PDV, Brasil, domínio `nexstock.com.br` ativo). Nome trocado para **Girostock** — trocadilho com "giro de estoque", termo que o próprio produto já usa (ex: KPI "Giro de estoque — top 5" no Painel).
+
+**O que foi feito:**
+- **Identidade visual:** novo símbolo (G em fita, gradiente azul→verde, braço em bloco 3D) e wordmark completo, ambos com fundo removido e aplicados como assets reais — substituem `nexstock-symbol.png` e `nexstock-logo-full.png` em `frontend/public/brand/`
+- **Tokens:** `nexstock.tokens.json` → `girostock.tokens.json`. Paleta quase idêntica (só `cor_superficie` no modo escuro mudou de `#1B263B` para `#112D4E`); tipografia trocada de Fraunces/Manrope para Poppins/Inter; `logo_texto` e `logo_tagline` atualizados
+- **Tagline:** a tagline de marketing completa ("Estoque em movimento. Resultados em evolução.") é longa demais pro slot compacto de tagline da sidebar/login (9–11px, uma linha) — usado "Estoque em Movimento" nesse slot; a versão completa fica reservada pra material de divulgação (banners, landing page)
+- **Chaves de localStorage renomeadas** (`nexstock-modo-tema`, `nexstock-estacao-ativa`, `nexstock-ultima-estacao-escolhida` → prefixo `girostock-`): usuários com sessão ativa perdem a preferência de tema/estação salva uma única vez (voltam ao padrão) na primeira visita após o deploy — aceitável para um rebranding, registrado aqui para não ser confundido com bug
+- **Strings de UI e textos soltos:** "Nex"/"Stock" trocado por "Giro"/"Stock" em sidebar, login e tela de trocar-senha; menções soltas a "NexStock" em `trocar-senha/page.tsx`, `vendas/page.tsx` e `docs/GUIA_CONFIGURACAO_ESTACAO_IMPRESSAO.md`
+- **Fontes:** import do Google Fonts em `globals.css` trocado (Poppins/Inter no lugar de Fraunces/Manrope, incluindo os pesos usados em `h1-h3` e no corpo); mesma troca aplicada nos templates HTML de impressão de etiquetas (`GerarEtiquetaRapidaDialog.tsx`, `etiquetas/page.tsx`), que antes referenciavam Manrope sem nunca efetivamente carregá-la (janela de impressão não importa fontes do app principal — bug latente pré-existente, corrigido de passagem)
+- **Metadados e favicon:** título da aba atualizado para "Girostock — Estoque em Movimento"; `app/icon.png` e `app/apple-icon.png` adicionados via convenção do Next.js App Router (não existia favicon antes desta etapa)
+- **DEVLOG.md histórico não foi alterado** — todas as menções anteriores a "NexStock" (etapas 1-37) permanecem como registro histórico do nome do produto na época
+
+**O que NÃO mudou:** paleta de cor base (`#0D182A`, `#2563EB`, `#10B981` idênticos), todos os componentes visuais, layout, sidebar de 240px — o rebranding foi decidido como troca de identidade, não de fundação visual, então o esforço de implementação ficou concentrado em identidade (logo/nome/tipografia), não em redesenho de UI.
+
+**Testes rodados:**
+- `npx tsc --noEmit`: 0 erros
+- `npm run build`: sucesso, 21 páginas geradas, `/icon.png` e `/apple-icon.png` detectados automaticamente
+- Bandit (SAST) sobre `app/`: 0 problemas
+- Suíte backend completa: 249/249 + 6/6 `test_auth.py` isolado = **255/255 passando** (banco de teste recriado do zero via `setup_test_db.sh` antes da suíte, com os 3 roles reais — nenhum teste alterado nesta etapa, só confirmando que o rebranding não quebrou nada no backend, o que era esperado já que a etapa não tocou em nenhum arquivo `.py`)
+
+**Pendência conhecida:** os assets de logo usados são uma recriação vetorial aproximada feita a partir de referências visuais do usuário, não o arquivo de produção final gerado por ele — funcional e já validado no build, mas deve ser substituído pelo arquivo definitivo assim que disponível (mesmo processo desta etapa, só trocando os dois PNGs em `frontend/public/brand/`).
+
+**Entregável:** arquivos alterados (`frontend/themes/girostock.tokens.json` novo, `nexstock.tokens.json` removido; `frontend/public/brand/girostock-*.png` novos, `nexstock-*.png` removidos; `frontend/app/icon.png` e `apple-icon.png` novos; `useTheme.tsx`, `useEstacaoRuntime.ts`, `EnviarParaEstacaoBotao.tsx`, `layout.tsx` (dashboard e raiz), `login/page.tsx`, `trocar-senha/page.tsx`, `vendas/page.tsx`, `globals.css`, `GerarEtiquetaRapidaDialog.tsx`, `etiquetas/page.tsx`, `docs/GUIA_CONFIGURACAO_ESTACAO_IMPRESSAO.md`) + zip completo do projeto.

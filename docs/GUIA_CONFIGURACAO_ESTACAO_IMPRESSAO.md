@@ -1,7 +1,7 @@
 # Guia — Configurando uma Estação de Impressão
 
 Este guia é pra quem vai deixar um computador (Caixa 1, Depósito, etc.)
-funcionando como Estação de Impressão do NexStock: recebendo pedidos de
+funcionando como Estação de Impressão do Girostock: recebendo pedidos de
 impressão do celular ou de qualquer outro dispositivo e imprimindo
 automaticamente na impressora ligada a esse PC.
 
@@ -16,13 +16,13 @@ Leva uns 10 minutos, e só precisa ser feito **uma vez por computador**.
 - A impressora já instalada e funcionando normalmente nesse computador
   (se hoje você já consegue imprimir um documento qualquer nele, já está
   pronto nesse quesito)
-- Um usuário **admin** do NexStock pra fazer o registro
+- Um usuário **admin** do Girostock pra fazer o registro
 
 ---
 
 ## Passo 1 — Instalar o QZ Tray
 
-O QZ Tray é o programa que permite ao NexStock enxergar e usar a
+O QZ Tray é o programa que permite ao Girostock enxergar e usar a
 impressora desse computador. Sem ele, a Estação não consegue imprimir.
 
 1. Baixe em **https://qz.io/download/**
@@ -31,19 +31,19 @@ impressora desse computador. Sem ele, a Estação não consegue imprimir.
    (o ícone perto do relógio, no Windows; ou na barra superior, no Mac)
 4. Deixe ele aberto — não precisa fazer nada além disso por enquanto
 
-> Na primeira vez que o NexStock tentar imprimir por esse computador,
+> Na primeira vez que o Girostock tentar imprimir por esse computador,
 > vai aparecer um popup do QZ Tray pedindo confirmação de segurança.
 > Isso é esperado (o sistema ainda não tem certificado assinado) — só
 > aceitar. Costuma aparecer de novo a cada nova sessão do navegador.
 
 ---
 
-## Passo 2 — Registrar a estação no NexStock
+## Passo 2 — Registrar a estação no Girostock
 
-1. Abra o NexStock **neste mesmo computador**, logado como admin
+1. Abra o Girostock **neste mesmo computador**, logado como admin
 2. Vá em **Configurações → Estações de Impressão**
 3. Clique em **"Registrar nova estação"**
-4. Se o QZ Tray estiver rodando (Passo 1), o NexStock já vai listar as
+4. Se o QZ Tray estiver rodando (Passo 1), o Girostock já vai listar as
    impressoras que esse Windows/Mac enxerga
 5. Escolha a impressora certa, dê um nome pra essa estação (ex: "Caixa
    1", "Depósito") e clique em **Salvar**

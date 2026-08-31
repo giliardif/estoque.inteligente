@@ -8,7 +8,7 @@ import {
   EstacaoTokenError,
 } from "@/lib/api-estacoes";
 
-const CHAVE_LOCAL_STORAGE = "nexstock-estacao-ativa";
+const CHAVE_LOCAL_STORAGE = "girostock-estacao-ativa";
 const INTERVALO_POLLING_MS = 6000; // dentro da faixa 5-8s definida na etapa
 
 export type EstacaoLocal = {

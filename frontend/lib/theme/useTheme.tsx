@@ -53,12 +53,12 @@ type ThemeContextValue = ModoTokens & {
   alternarModo: () => void;
 };
 
-const CHAVE_MODO_STORAGE = "nexstock-modo-tema";
+const CHAVE_MODO_STORAGE = "girostock-modo-tema";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 // Em produção isso viria de GET /tenants/{id}/tema (tabela `themes`), não de um
 // import estático — aqui carregado localmente só porque ainda não existe
-// tela de administração de tema. A identidade padrão do sistema é a NexStock;
+// tela de administração de tema. A identidade padrão do sistema é a Girostock;
 // todo tenant usa esse token a menos que tenha um override próprio configurado
 // (mecanismo mantido para clientes futuros, mas nenhum tenant usa hoje —
 // inclusive o Doce Encanto, que abriu mão da identidade caramelo/rosa própria
@@ -66,7 +66,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 // os dois modos (escuro/claro); um tenant com override pode customizar um,
 // os dois, ou nenhum — o modo escuro continua sendo o padrão do sistema.
 async function carregarArquivoDoTenant(): Promise<TemaArquivo> {
-  const mod = await import("../../themes/nexstock.tokens.json");
+  const mod = await import("../../themes/girostock.tokens.json");
   return mod as unknown as TemaArquivo;
 }
 

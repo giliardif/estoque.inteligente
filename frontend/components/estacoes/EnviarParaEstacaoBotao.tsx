@@ -5,7 +5,7 @@ import { Wifi, WifiOff, Send, Check, Loader2 } from "lucide-react";
 import { listarEstacoes, criarJobImpressao, listarFila } from "@/lib/api-estacoes";
 import { EstacaoImpressao } from "@/lib/types";
 
-const CHAVE_ULTIMA_ESTACAO = "nexstock-ultima-estacao-escolhida";
+const CHAVE_ULTIMA_ESTACAO = "girostock-ultima-estacao-escolhida";
 
 type Props = {
   titulo: string;

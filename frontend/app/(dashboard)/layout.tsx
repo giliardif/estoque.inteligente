@@ -35,7 +35,7 @@ function LogoBloco({ tema }: { tema: ReturnType<typeof useTheme> }) {
       ) : null}
       <div className="leading-tight">
         <div className="font-logotype font-bold text-sm tracking-tight">
-          <span style={{ color: "var(--cor-texto)" }}>Nex</span>
+          <span style={{ color: "var(--cor-texto)" }}>Giro</span>
           <span style={{ color: "var(--cor-acento)" }}>Stock</span>
         </div>
         {tema.logo_tagline ? (

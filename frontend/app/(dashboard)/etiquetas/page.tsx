@@ -129,7 +129,7 @@ export default function EtiquetasPage() {
       }
       setImprimindo(true);
       const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-        body{margin:0;font-family:Manrope,Arial,sans-serif;}
+        body{margin:0;font-family:Inter,Arial,sans-serif;}
         .grade{display:grid;grid-template-columns:repeat(${config.colunas},1fr);gap:${config.espacamentoMm}mm;padding:${config.margemMm}mm;}
       </style></head><body><div class="grade">${gradeImpressaoRef.current?.innerHTML ?? ""}</div></body></html>`;
       imprimirHtml(html, config.impressora)
@@ -493,7 +493,7 @@ export default function EtiquetasPage() {
                 produtoId={selecionados.length === 1 ? selecionados[0].produto.id : null}
                 obterHtml={() =>
                   `<!doctype html><html><head><meta charset="utf-8"><style>
-                    body{margin:0;font-family:Manrope,Arial,sans-serif;}
+                    body{margin:0;font-family:Inter,Arial,sans-serif;}
                     .grade{display:grid;grid-template-columns:repeat(${config.colunas},1fr);gap:${config.espacamentoMm}mm;padding:${config.margemMm}mm;}
                   </style></head><body><div class="grade">${gradeImpressaoRef.current?.innerHTML ?? ""}</div></body></html>`
                 }

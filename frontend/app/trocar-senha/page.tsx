@@ -84,7 +84,7 @@ export default function TrocarSenhaPage() {
           ) : null}
           <div className="text-center leading-tight">
             <div className="font-logotype text-2xl font-bold tracking-tight">
-              <span style={{ color: "var(--cor-texto)" }}>Nex</span>
+              <span style={{ color: "var(--cor-texto)" }}>Giro</span>
               <span style={{ color: "var(--cor-acento)" }}>Stock</span>
             </div>
           </div>
@@ -101,7 +101,7 @@ export default function TrocarSenhaPage() {
         >
           <h1 className="text-lg font-semibold mb-1">Defina sua senha</h1>
           <p className="text-sm mb-5" style={{ color: "var(--cor-texto-muted)" }}>
-            Esta é sua primeira vez no NexStock. Troque a senha provisória antes de continuar.
+            Esta é sua primeira vez no Girostock. Troque a senha provisória antes de continuar.
           </p>
 
           {erro && (
