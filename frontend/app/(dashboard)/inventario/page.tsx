@@ -2,29 +2,32 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
-import { InventarioListaItem, PainelInventario, Produto } from "@/lib/types";
+import { InventarioCiclo, InventarioListaItem, PainelInventario } from "@/lib/types";
 import {
-  useToast, TableSkeletonRows, Pagination, ThOrdenavel, TrHover, RowMenu, useDebouncedValue, useKeyboardShortcuts,
+  useToast, TableSkeletonRows, Pagination, ThOrdenavel, TrHover, useDebouncedValue, useKeyboardShortcuts,
 } from "@/components/ui";
-import { Search, Eye, AlertTriangle, ScanBarcode } from "lucide-react";
-import { ScannerCodigo } from "@/components/scanner/ScannerCodigo";
-import { useLeitorFisico } from "@/lib/useLeitorFisico";
+import { Search, AlertTriangle } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { PainelOperadorInventario } from "@/components/inventario/PainelOperadorInventario";
+import { PainelConciliacaoInventario } from "@/components/inventario/PainelConciliacaoInventario";
 
 const TAMANHO_PAGINA = 25;
 
-type Inventario = { id: string; status: string; ciclo: string };
+const STATUS_LABEL: Record<string, string> = { aberto: "Aberto", em_analise: "Em Análise", fechado: "Fechado" };
 
-const STATUS_LABEL: Record<string, string> = { aberto: "Aberto", fechado: "Fechado" };
+// Perfis com poder de conciliar/aprovar — hoje só admin. Ver
+// PERFIS_SUPERVISOR em core/security.py no backend: quando o perfil
+// 'supervisor' existir, é só incluir aqui também.
+const PERFIS_SUPERVISOR = ["admin"];
 
 export default function InventarioPage() {
   const { erro: toastErro } = useToast();
+  const { usuario } = useAuth();
+  const ehSupervisor = usuario ? PERFIS_SUPERVISOR.includes(usuario.perfil) : false;
 
-  const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [inventario, setInventario] = useState<Inventario | null>(null);
-  const [contagem, setContagem] = useState<Record<string, string>>({});
+  const [inventario, setInventario] = useState<InventarioCiclo | null>(null);
   const [ciclo, setCiclo] = useState(() => new Date().toISOString().slice(0, 7));
   const [erro, setErro] = useState<string | null>(null);
-  const [sucesso, setSucesso] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
   const [verificandoAberto, setVerificandoAberto] = useState(true);
 
@@ -39,43 +42,6 @@ export default function InventarioPage() {
   const [direcao, setDirecao] = useState<"asc" | "desc">("desc");
 
   const buscaRef = useRef<HTMLInputElement>(null);
-
-  // --- Scanner (só faz sentido durante uma contagem em aberto) -----------
-  const [scannerAberto, setScannerAberto] = useState(false);
-  const [modoContagem, setModoContagem] = useState<"tabela" | "fila">("tabela");
-  const [filaContagem, setFilaContagem] = useState<string[]>([]);
-  const [linhaDestacadaId, setLinhaDestacadaId] = useState<string | null>(null);
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  function localizarProdutoNaContagem(produto: Produto) {
-    if (modoContagem === "fila") {
-      setFilaContagem((atual) => (atual.includes(produto.id) ? atual : [produto.id, ...atual]));
-    }
-    setLinhaDestacadaId(produto.id);
-    // Espera o próximo tick pro item aparecer no DOM (relevante no modo
-    // fila, onde o card só existe depois do setFilaContagem acima).
-    setTimeout(() => {
-      inputRefs.current[produto.id]?.scrollIntoView({ behavior: "smooth", block: "center" });
-      inputRefs.current[produto.id]?.focus();
-    }, 50);
-    setTimeout(() => setLinhaDestacadaId((atual) => (atual === produto.id ? null : atual)), 900);
-  }
-
-  const buscarELocalizarNaContagem = useCallback(async (codigo: string) => {
-    if (!inventario) return; // sem contagem em aberto, bipar não tem o que fazer aqui
-    try {
-      const produto = await apiFetch<Produto>(`/produtos/buscar-codigo?codigo=${encodeURIComponent(codigo)}`);
-      localizarProdutoNaContagem(produto);
-    } catch (err) {
-      const msg = err instanceof ApiError && err.status === 404
-        ? "Nenhum produto encontrado para esse código."
-        : "Não foi possível buscar o produto.";
-      toastErro(msg);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inventario, modoContagem, toastErro]);
-
-  useLeitorFisico(buscarELocalizarNaContagem);
 
   const carregarPainel = useCallback(async () => {
     setCarregando(true);
@@ -105,24 +71,25 @@ export default function InventarioPage() {
     setPagina(1);
   }, [buscaDebounced, statusFiltro, depositoId]);
 
-  useEffect(() => {
-    apiFetch<Produto[]>("/produtos").then(setProdutos).catch(() => {});
-
-    // Retomada: se já existe um inventário em aberto (ex.: página recarregada
-    // no meio de uma contagem), carrega ele em vez de deixar o usuário perder
-    // o progresso e não conseguir nem abrir um novo (backend bloqueia 2
-    // inventários abertos ao mesmo tempo pro mesmo depósito).
-    apiFetch<Inventario | null>("/inventario/aberto")
-      .then((inv) => { if (inv) setInventario(inv); })
+  const verificarAberto = useCallback(() => {
+    setVerificandoAberto(true);
+    // Retomada: se já existe um ciclo em andamento (aberto ou em_analise),
+    // carrega ele em vez de deixar o usuário perder o progresso e não
+    // conseguir nem abrir um novo (backend bloqueia 2 ciclos simultâneos
+    // pro mesmo depósito).
+    apiFetch<InventarioCiclo | null>("/inventario/aberto")
+      .then((inv) => setInventario(inv))
       .catch(() => {})
       .finally(() => setVerificandoAberto(false));
   }, []);
+
+  useEffect(() => { verificarAberto(); }, [verificarAberto]);
 
   async function abrirInventario() {
     setErro(null);
     setProcessando(true);
     try {
-      const inv = await apiFetch<Inventario>("/inventario", { method: "POST", body: JSON.stringify({ ciclo }) });
+      const inv = await apiFetch<InventarioCiclo>("/inventario", { method: "POST", body: JSON.stringify({ ciclo }) });
       setInventario(inv);
       carregarPainel();
     } catch (err) {
@@ -134,33 +101,9 @@ export default function InventarioPage() {
     }
   }
 
-  async function fecharInventario() {
-    if (!inventario) return;
-    setErro(null);
-    setSucesso(null);
-    setProcessando(true);
-    try {
-      const itens = produtos
-        .filter((p) => contagem[p.id] !== undefined && contagem[p.id] !== "")
-        .map((p) => ({ produto_id: p.id, qtd_contada: Number(contagem[p.id]) }));
-
-      if (itens.length === 0) {
-        setErro("Informe a contagem de pelo menos um produto antes de fechar.");
-        return;
-      }
-
-      await apiFetch(`/inventario/${inventario.id}/fechar`, { method: "POST", body: JSON.stringify({ itens }) });
-      setSucesso("Inventário fechado — ajustes de estoque aplicados automaticamente.");
-      setInventario(null);
-      setContagem({});
-      carregarPainel();
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Não foi possível fechar o inventário.";
-      setErro(msg);
-      toastErro(msg);
-    } finally {
-      setProcessando(false);
-    }
+  function aoConcluirCiclo() {
+    setInventario(null);
+    carregarPainel();
   }
 
   const itensLista = painel?.itens ?? [];
@@ -198,14 +141,9 @@ export default function InventarioPage() {
           {erro}
         </div>
       )}
-      {sucesso && (
-        <div className="text-sm rounded-md px-3 py-2" style={{ color: "var(--cor-sucesso)", background: "rgba(91,140,99,0.14)" }}>
-          {sucesso}
-        </div>
-      )}
 
       {verificandoAberto && (
-        <p className="text-sm" style={{ color: "var(--cor-texto-muted)" }}>Verificando contagem em andamento...</p>
+        <p className="text-sm" style={{ color: "var(--cor-texto-muted)" }}>Verificando ciclo em andamento...</p>
       )}
 
       {!verificandoAberto && !inventario && (
@@ -231,155 +169,11 @@ export default function InventarioPage() {
       )}
 
       {!verificandoAberto && inventario && (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--cor-borda)" }}>
-          <div className="px-5 py-3.5 border-b flex flex-col gap-2 md:flex-row md:items-center md:justify-between" style={{ borderColor: "var(--cor-borda)" }}>
-            <h3 className="font-display font-semibold text-sm">Contagem — ciclo {inventario.ciclo}</h3>
-            <button
-              onClick={fecharInventario}
-              disabled={processando}
-              className="rounded-md px-3.5 py-2 font-bold text-xs disabled:opacity-60"
-              style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
-            >
-              {processando ? "Fechando..." : "Fechar contagem e ajustar estoque"}
-            </button>
-          </div>
-
-          <div className="px-5 py-3 border-b flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: "var(--cor-borda)" }}>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => setModoContagem("tabela")}
-                className="rounded-md px-3 py-1.5 text-xs font-semibold border"
-                style={modoContagem === "tabela"
-                  ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
-                  : { background: "transparent", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
-              >
-                Tabela geral
-              </button>
-              <button
-                onClick={() => setModoContagem("fila")}
-                className="rounded-md px-3 py-1.5 text-xs font-semibold border"
-                style={modoContagem === "fila"
-                  ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
-                  : { background: "transparent", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
-              >
-                Fila de contagem
-              </button>
-            </div>
-            <button
-              onClick={() => setScannerAberto(true)}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold"
-              style={{ background: "var(--cor-acento)", color: "#06231a" }}
-            >
-              <ScanBarcode size={13} /> Escanear
-            </button>
-          </div>
-
-          {modoContagem === "tabela" ? (
-            <>
-              {/* Cards — mobile apenas */}
-              <div className="flex flex-col gap-2 p-3.5 md:hidden">
-                {produtos.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between gap-2 text-sm rounded-md px-1.5 py-1 transition-colors"
-                    style={{ background: linhaDestacadaId === p.id ? "rgba(16,185,129,0.18)" : "transparent" }}
-                  >
-                    <span className="truncate">{p.nome}</span>
-                    <input
-                      ref={(el) => { inputRefs.current[p.id] = el; }}
-                      type="number" min="0" step="0.01"
-                      value={contagem[p.id] ?? ""}
-                      onChange={(e) => setContagem({ ...contagem, [p.id]: e.target.value })}
-                      className="rounded-md px-2 py-1 text-sm outline-none border w-20 shrink-0"
-                      style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Tabela — desktop apenas */}
-              <table className="hidden md:table w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="text-left px-5 py-2 text-xs font-semibold uppercase" style={{ color: "var(--cor-texto-muted)" }}>Produto</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold uppercase" style={{ color: "var(--cor-texto-muted)" }}>Contagem</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {produtos.map((p) => (
-                    <tr
-                      key={p.id}
-                      style={{ borderTop: "1px solid var(--cor-borda)", background: linhaDestacadaId === p.id ? "rgba(16,185,129,0.18)" : "transparent" }}
-                      className="transition-colors"
-                    >
-                      <td className="px-5 py-2">{p.nome}</td>
-                      <td className="px-3 py-2">
-                        <input
-                          ref={(el) => { inputRefs.current[p.id] = el; }}
-                          type="number" min="0" step="0.01"
-                          value={contagem[p.id] ?? ""}
-                          onChange={(e) => setContagem({ ...contagem, [p.id]: e.target.value })}
-                          className="rounded-md px-2 py-1 text-sm outline-none border w-24"
-                          style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          ) : (
-            // Fila de contagem: só mostra o que já foi bipado, mais recente
-            // no topo — pensada pra quem tá andando pela loja com o leitor,
-            // sem precisar rolar a tabela inteira pra achar cada item.
-            <div className="flex flex-col gap-2 p-3.5">
-              {filaContagem.length === 0 && (
-                <div className="text-center text-sm py-8" style={{ color: "var(--cor-texto-muted)" }}>
-                  Nenhum item bipado ainda. Clique em &quot;Escanear&quot; ou use o leitor físico pra começar.
-                </div>
-              )}
-              {filaContagem.map((produtoId) => {
-                const p = produtos.find((x) => x.id === produtoId);
-                if (!p) return null;
-                return (
-                  <div
-                    key={p.id}
-                    className="flex items-center gap-3 rounded-lg border px-3.5 py-2.5 transition-colors"
-                    style={{
-                      borderColor: linhaDestacadaId === p.id ? "var(--cor-acento)" : "var(--cor-borda)",
-                      background: linhaDestacadaId === p.id ? "rgba(16,185,129,0.1)" : "var(--cor-base)",
-                    }}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium truncate">{p.nome}</div>
-                      <div className="text-xs font-mono" style={{ color: "var(--cor-texto-muted)" }}>
-                        {p.sku || p.codigo_barras || "—"}
-                      </div>
-                    </div>
-                    <input
-                      ref={(el) => { inputRefs.current[p.id] = el; }}
-                      type="number" min="0" step="0.01"
-                      value={contagem[p.id] ?? ""}
-                      onChange={(e) => setContagem({ ...contagem, [p.id]: e.target.value })}
-                      placeholder="Qtd."
-                      className="rounded-md px-2 py-1.5 text-sm outline-none border w-24 shrink-0"
-                      style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
-                    />
-                  </div>
-                );
-              })}
-              {filaContagem.length > 0 && (
-                <button
-                  onClick={() => setModoContagem("tabela")}
-                  className="text-xs font-semibold self-start mt-1"
-                  style={{ color: "var(--cor-acento)" }}
-                >
-                  Ver tabela completa →
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        inventario.status === "em_analise" && ehSupervisor ? (
+          <PainelConciliacaoInventario inventarioId={inventario.id} onAprovado={aoConcluirCiclo} />
+        ) : (
+          <PainelOperadorInventario inventarioId={inventario.id} onEnviadoParaAnalise={verificarAberto} />
+        )
       )}
 
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3 md:flex-wrap">
@@ -397,7 +191,7 @@ export default function InventarioPage() {
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:contents">
-            {["aberto", "fechado"].map((s) => (
+            {["aberto", "em_analise", "fechado"].map((s) => (
               <ChipFiltro key={s} label={STATUS_LABEL[s]} ativo={statusFiltro === s}
                 onClick={() => setStatusFiltro((atual) => (atual === s ? "" : s))} />
             ))}
@@ -485,12 +279,6 @@ export default function InventarioPage() {
           <Pagination pagina={pagina} tamanhoPagina={TAMANHO_PAGINA} total={painel.total} onPaginaChange={setPagina} />
         )}
       </div>
-
-      <ScannerCodigo
-        aberto={scannerAberto}
-        onFechar={() => setScannerAberto(false)}
-        onProdutoEncontrado={localizarProdutoNaContagem}
-      />
     </div>
   );
 }
@@ -545,7 +333,9 @@ function ChipFiltro({ label, ativo, onClick }: { label: string; ativo: boolean; 
 function StatusBadge({ status }: { status: string }) {
   const estilo = status === "aberto"
     ? { color: "var(--cor-acento)", background: "rgba(16,185,129,0.14)" }
-    : { color: "var(--cor-texto-muted)", background: "rgba(138,127,115,0.14)" };
+    : status === "em_analise"
+      ? { color: "#F59E0B", background: "rgba(245,158,11,0.16)" }
+      : { color: "var(--cor-texto-muted)", background: "rgba(138,127,115,0.14)" };
   return <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={estilo}>{STATUS_LABEL[status] ?? status}</span>;
 }
 

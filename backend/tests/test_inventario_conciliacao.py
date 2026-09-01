@@ -4,6 +4,8 @@ Testa o fluxo de encerramento e aprovação do inventário (Etapa 39):
   -> supervisor concilia e decide item a item -> aprova o ajuste final
   (só aí grava movimentação real).
 """
+import io
+
 import pytest
 from httpx import AsyncClient
 
@@ -137,6 +139,46 @@ async def test_recontagem_solicitada_permite_operador_recontar_com_ciclo_em_anal
 
     aprovar = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/aprovar-final")
     assert aprovar.status_code == 200, aprovar.text
+
+
+@pytest.mark.asyncio
+async def test_obter_aberto_tambem_retoma_ciclo_em_analise(client_tenant_a: AsyncClient, produto_com_saldo_10: str):
+    inv_id = await _abrir_e_contar(client_tenant_a, produto_com_saldo_10, qtd_contada=10)
+    await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")
+
+    resp = await client_tenant_a.get("/api/v1/inventario/aberto")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["id"] == inv_id
+    assert resp.json()["status"] == "em_analise"
+
+
+@pytest.mark.asyncio
+async def test_upload_anexo_extensao_invalida_e_rejeitado(client_tenant_a: AsyncClient, produto_com_saldo_10: str):
+    inv = await client_tenant_a.post("/api/v1/inventario", json={"ciclo": "2026-08"})
+    inv_id = inv.json()["id"]
+    arquivo = io.BytesIO(b"conteudo qualquer")
+    resp = await client_tenant_a.post(
+        f"/api/v1/inventario/{inv_id}/itens/{produto_com_saldo_10}/anexo",
+        files={"arquivo": ("foto.gif", arquivo, "image/gif")},
+    )
+    assert resp.status_code == 415, resp.text
+
+
+@pytest.mark.asyncio
+async def test_upload_anexo_valido_retorna_503_sem_storage_configurado(
+    client_tenant_a: AsyncClient, produto_com_saldo_10: str
+):
+    """Neste ambiente de teste SUPABASE_URL não está setado — confirma que o
+    arquivo válido passa das validações e falha especificamente por falta de
+    configuração de infraestrutura, mesmo padrão de test_usuarios_me.py."""
+    inv = await client_tenant_a.post("/api/v1/inventario", json={"ciclo": "2026-08"})
+    inv_id = inv.json()["id"]
+    arquivo = io.BytesIO(b"conteudo pequeno de imagem")
+    resp = await client_tenant_a.post(
+        f"/api/v1/inventario/{inv_id}/itens/{produto_com_saldo_10}/anexo",
+        files={"arquivo": ("foto.jpg", arquivo, "image/jpeg")},
+    )
+    assert resp.status_code == 503, resp.text
 
 
 @pytest.mark.asyncio

@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_BUCKET_AVATARES: str = "usuarios-avatares"
     MAX_IMAGEM_AVATAR_SIZE_MB: int = 2
 
+    # Etapa 39 — fotos de justificativa de divergência no inventário (avaria,
+    # vencimento etc). Mesmo padrão dos dois buckets acima.
+    SUPABASE_STORAGE_BUCKET_INVENTARIO: str = "inventario-anexos"
+    MAX_IMAGEM_INVENTARIO_SIZE_MB: int = 3
+
     # Import de produtos em massa via planilha (Etapa 26). Limites conservadores
     # de propósito: evita DoS por planilha gigante (linha a linha é validada em
     # memória, sem streaming pro banco até a confirmação).

@@ -95,3 +95,15 @@ async def enviar_imagem_usuario(*, tenant_id: uuid.UUID, usuario_id: uuid.UUID, 
         arquivo=arquivo,
         limite_mb=settings.MAX_IMAGEM_AVATAR_SIZE_MB,
     )
+
+
+async def enviar_anexo_inventario(
+    *, tenant_id: uuid.UUID, inventario_id: uuid.UUID, produto_id: uuid.UUID, arquivo: UploadFile
+) -> str:
+    settings = get_settings()
+    return await _enviar_imagem(
+        bucket=settings.SUPABASE_STORAGE_BUCKET_INVENTARIO,
+        caminho_prefixo=f"{tenant_id}/{inventario_id}/{produto_id}",
+        arquivo=arquivo,
+        limite_mb=settings.MAX_IMAGEM_INVENTARIO_SIZE_MB,
+    )

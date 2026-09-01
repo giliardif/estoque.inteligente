@@ -2,11 +2,12 @@ from collections.abc import AsyncGenerator
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_for_tenant
 from app.core.security import PERFIS_SUPERVISOR, CurrentUser, get_current_user, require_perfil
+from app.core.storage import enviar_anexo_inventario
 from app.modules.inventario import service
 from app.modules.inventario.schemas import (
     AprovacaoFinalOut,
@@ -110,6 +111,22 @@ async def registrar_contagem_item(
         "divergencia": item.divergencia,
         "status_item": item.status_item,
     }
+
+
+@router.post("/{inventario_id}/itens/{produto_id}/anexo", response_model=dict)
+async def enviar_anexo_item_inventario(
+    inventario_id: UUID,
+    produto_id: UUID,
+    arquivo: UploadFile,
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+):
+    """Foto do item/prateleira anexada à justificativa de divergência (avaria,
+    vencimento etc). Só faz upload e devolve a URL — salvar no item é um PATCH
+    separado em .../itens/{produto_id}, junto com o motivo."""
+    url = await enviar_anexo_inventario(
+        tenant_id=user.tenant_id, inventario_id=inventario_id, produto_id=produto_id, arquivo=arquivo
+    )
+    return {"anexo_url": url}
 
 
 @router.post("/{inventario_id}/enviar-analise", response_model=EnviarAnaliseOut)

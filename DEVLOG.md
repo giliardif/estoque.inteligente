@@ -3067,3 +3067,25 @@ Esta entrada cobre só o **backend** das 3 pendências identificadas (Empresa, n
 **Pendência desta etapa:** só o backend está pronto. O frontend (`inventario/page.tsx`) ainda usa os endpoints antigos e precisa ser reescrito para consumir o novo fluxo — telas de Operador e Supervisor conforme o mockup já aprovado. Migração 016 já está em staging, então o frontend atual continuará funcionando com os endpoints que sobraram (`GET /painel`, `GET /aberto`, listagem), mas a tela de contagem em si vai quebrar até a próxima parte desta etapa (chama `/fechar`, que não existe mais) — **não fazer deploy do frontend atual em cima deste backend sem a Parte 2**.
 
 **Entregável (Parte 1 — backend):** `backend/migrations/016_inventario_conciliacao.sql` (novo), `backend/app/db/models.py`, `backend/app/core/security.py`, `backend/app/modules/inventario/{schemas,service,router}.py` (reescritos), `backend/tests/test_inventario.py` e `test_inventario_painel.py` (atualizados), `backend/tests/test_inventario_conciliacao.py` (novo) + zip completo do projeto.
+
+---
+
+### Etapa 39 — Parte 2 (frontend + acabamentos de backend)
+
+**O que foi feito:**
+- **Ajuste retroativo no backend:** `obter_aberto()` (usado por `GET /inventario/aberto` para retomar o ciclo em andamento ao carregar a página) só reconhecia status `aberto` — não achava um ciclo `em_analise` e o frontend perdia o rastro dele. Passou a aceitar `('aberto', 'em_analise')`. Teste novo cobrindo isso.
+- **Bucket novo no Supabase Storage:** `inventario-anexos` (público, mesmo padrão de `produtos-imagens`/`usuarios-avatares`), com `enviar_anexo_inventario()` em `core/storage.py` e endpoint `POST /{id}/itens/{produto_id}/anexo` — foto da justificativa de divergência (avaria, vencimento etc), path `{tenant_id}/{inventario_id}/{produto_id}/...`. Testes de validação (extensão inválida → 415, sem Storage configurado → 503), mesmo padrão de `test_usuarios_me.py`.
+- **`components/inventario/PainelOperadorInventario.tsx`** — tela de contagem: barra de progresso, os 3 cards de resumo, filtros [Todos/Pendente/Contados/Divergentes] (client-side — catálogo pequeno, não precisou de paginação no backend), busca por nome/EAN/categoria, stepper +/- com salvamento por item (`PATCH .../itens/{produto_id}` a cada alteração, sem lote), badges (Batido/Sobra/Perda/Pendente/Recontar — contagem cega de verdade, o componente nunca recebe `qtd_sistema`), modal de justificativa (motivo + foto, abre sozinho quando uma contagem gera divergência sem motivo ainda registrado), scanner de código de barras reaproveitado (bipar já localiza a linha do item na tabela, sem trocar de tela), botão "Concluir Contagem" com `ConfirmDialog` de confirmação.
+- **`components/inventario/PainelConciliacaoInventario.tsx`** — Painel de Conciliação: comparativo Qtd. Anterior / Contada / Diferença / Impacto (R$), ações [Aprovar Ajuste]/[Recontagem] por item divergente, KPIs do ciclo, trilha de auditoria (quem contou), botão "Aprovar e Ajustar Estoque Real" desabilitado até todo item ter decisão — com `ConfirmDialog` de confirmação.
+- **`inventario/page.tsx`** — removido o bloco antigo de contagem em lote (produtos completos + payload único pro `/fechar`, que não existe mais); a página agora só decide qual painel mostrar: se `status === 'em_analise'` e o usuário é supervisor (hoje só `admin`, via `useAuth().usuario.perfil`), mostra Conciliação; senão mostra o painel do Operador — que também é o que aparece pro operador durante um ciclo `em_analise` esperando aprovação, com os itens em `recontagem_solicitada` ainda editáveis.
+- Histórico de ciclos (`GET /inventario/painel`, tabela de baixo) ganhou o filtro `em_analise` e o badge âmbar correspondente.
+
+**Verificação:**
+- `tsc --noEmit`: limpo
+- `next build`: limpo, lint do Next passou sem avisos, `/inventario` compilando normal (11.4 kB)
+- Backend: 260/260 (+ suíte completa já validada na Parte 1); `test_auth.py` isolado deu timeout no sandbox desta sessão — comportamento intermitente já documentado, não mexi em nada de auth/JWT nesta parte, não tratei como regressão
+- Bandit: 0 problemas em todos os arquivos tocados (Parte 1 + Parte 2)
+
+**Entregável (Parte 2):** `backend/app/core/{storage,config}.py`, `backend/app/modules/inventario/router.py` (atualizado com endpoint de anexo), `backend/app/modules/inventario/service.py` (ajuste em `obter_aberto`), `backend/tests/test_inventario_conciliacao.py` (testes novos), `frontend/lib/types.ts`, `frontend/lib/api-inventario.ts` (novo), `frontend/components/inventario/{PainelOperadorInventario,PainelConciliacaoInventario}.tsx` (novos), `frontend/app/(dashboard)/inventario/page.tsx` (reescrito) + zip completo do projeto.
+
+**Etapa 39 completa** — backend e frontend prontos, testados e alinhados com o mockup aprovado no início da etapa.

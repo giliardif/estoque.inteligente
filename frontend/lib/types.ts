@@ -274,6 +274,66 @@ export type PainelInventario = {
   tamanho: number;
 };
 
+// --- Etapa 39: fluxo de encerramento e aprovação ---------------------------
+
+export type InventarioCiclo = {
+  id: string;
+  status: "aberto" | "em_analise" | "fechado";
+  ciclo: string;
+  deposito_id: string | null;
+  criado_em: string;
+  enviado_por: string | null;
+  enviado_em: string | null;
+  aprovado_por: string | null;
+  aprovado_em: string | null;
+};
+
+export type MotivoDivergencia = "avaria" | "vencimento" | "furto" | "erro_entrada";
+
+export type StatusItemInventario = "pendente" | "contado" | "divergente" | "aprovado" | "recontagem_solicitada";
+
+// Contagem cega: nunca inclui qtd_sistema, de propósito.
+export type ItemOperador = {
+  produto_id: string;
+  produto_nome: string;
+  codigo_barras: string | null;
+  categoria_nome: string | null;
+  qtd_contada: number | null;
+  divergencia: number | null;
+  status_item: StatusItemInventario;
+  motivo: MotivoDivergencia | null;
+  anexo_url: string | null;
+};
+
+export type PainelOperador = {
+  inventario: InventarioCiclo;
+  progresso: { total: number; contados: number; percentual: number };
+  resumo: { sem_divergencia: number; com_divergencia: number; pendentes: number };
+  itens: ItemOperador[];
+};
+
+export type ItemConciliacao = {
+  produto_id: string;
+  produto_nome: string;
+  codigo_barras: string | null;
+  qtd_anterior: number;
+  qtd_contada: number | null;
+  divergencia: number | null;
+  impacto_financeiro: number | null;
+  status_item: StatusItemInventario;
+  motivo: MotivoDivergencia | null;
+  anexo_url: string | null;
+  decidido_por_nome: string | null;
+  decidido_em: string | null;
+};
+
+export type Conciliacao = {
+  inventario: InventarioCiclo;
+  enviado_por_nome: string | null;
+  kpis: { itens_divergentes: number; itens_aguardando_decisao: number; impacto_financeiro_total: number };
+  itens: ItemConciliacao[];
+};
+
 // --- Painel da tela de Alertas ----------------------------------------------
 
 export type KpisAlertas = {

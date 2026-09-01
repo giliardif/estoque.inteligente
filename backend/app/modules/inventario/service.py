@@ -366,10 +366,15 @@ async def listar(
 
 
 async def obter_aberto(db: AsyncSession, *, tenant_id: UUID, deposito_id: UUID | None) -> Inventario | None:
-    """Usado pelo frontend ao carregar a tela de Inventário, para retomar uma
-    contagem em andamento em vez de perdê-la caso a página seja recarregada."""
+    """Usado pelo frontend ao carregar a tela de Inventário, para retomar um
+    ciclo em andamento em vez de perdê-lo caso a página seja recarregada.
+    Inclui 'em_analise' (Etapa 39) — do ponto de vista do frontend é o
+    mesmo ciclo em andamento, só numa etapa diferente (aguardando
+    conciliação em vez de em contagem)."""
     stmt = select(Inventario).where(
-        Inventario.tenant_id == tenant_id, Inventario.deposito_id == deposito_id, Inventario.status == "aberto"
+        Inventario.tenant_id == tenant_id,
+        Inventario.deposito_id == deposito_id,
+        Inventario.status.in_(("aberto", "em_analise")),
     )
     return (await db.execute(stmt)).scalar_one_or_none()
 
