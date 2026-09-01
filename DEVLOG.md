@@ -3037,3 +3037,33 @@ Esta entrada cobre só o **backend** das 3 pendências identificadas (Empresa, n
 **Pendência conhecida:** os assets de logo usados são uma recriação vetorial aproximada feita a partir de referências visuais do usuário, não o arquivo de produção final gerado por ele — funcional e já validado no build, mas deve ser substituído pelo arquivo definitivo assim que disponível (mesmo processo desta etapa, só trocando os dois PNGs em `frontend/public/brand/`).
 
 **Entregável:** arquivos alterados (`frontend/themes/girostock.tokens.json` novo, `nexstock.tokens.json` removido; `frontend/public/brand/girostock-*.png` novos, `nexstock-*.png` removidos; `frontend/app/icon.png` e `apple-icon.png` novos; `useTheme.tsx`, `useEstacaoRuntime.ts`, `EnviarParaEstacaoBotao.tsx`, `layout.tsx` (dashboard e raiz), `login/page.tsx`, `trocar-senha/page.tsx`, `vendas/page.tsx`, `globals.css`, `GerarEtiquetaRapidaDialog.tsx`, `etiquetas/page.tsx`, `docs/GUIA_CONFIGURACAO_ESTACAO_IMPRESSAO.md`) + zip completo do projeto.
+
+---
+
+## Etapa 39 — Inventário: fluxo de encerramento e aprovação (backend)
+
+**Motivo:** o fechamento de inventário ajustava o estoque real na hora, direto do lote de contagem do operador — sem revisão. Isso foi substituído por um fluxo de duas etapas com contagem cega e conciliação supervisionada, desenhado com o usuário a partir de um mockup interativo aprovado antes de qualquer código (preview HTML com os tokens reais do Girostock, telas de Operador e Supervisor lado a lado).
+
+**Máquina de estados:**
+- `Inventario.status`: `aberto` → `em_analise` → `fechado`. Só `fechado` grava movimentação real de estoque.
+- `InventarioItem.status_item`: `pendente` → `contado` (sem divergência) | `divergente` (aguardando decisão) → `aprovado` | `recontagem_solicitada` (item volta pro operador contar de novo mesmo com o ciclo em `em_analise` — não precisa reabrir o ciclo inteiro).
+
+**O que foi feito:**
+- **Migração 016** (`inventarios`: novo status `em_analise` + `enviado_por/em`, `aprovado_por/em` para trilha de auditoria; `inventario_itens`: `status_item`, `motivo`, `anexo_url`, `custo_unitario`, `decidido_por/em`). Aplicada em staging (Supabase MCP) e no banco de teste local.
+- **`abrir()` agora pré-popula** um `InventarioItem` "pendente" por produto ativo do tenant/depósito, já com `qtd_sistema` e `custo_unitario` (snapshot de `produtos.custo_medio`) congelados no momento da abertura — é o que sustenta os contadores "45/100 itens" e os filtros Pendente/Contados como consulta direta, em vez de derivar isso no frontend.
+- **Contagem cega de verdade:** `GET /inventario/{id}/operador` nunca inclui `qtd_sistema` no payload — só `divergencia` (sinal/magnitude), testado explicitamente verificando que a string `"qtd_sistema"` não aparece no corpo bruto da resposta.
+- **Impacto financeiro calculado, nunca digitado:** `divergência × custo_unitario`, congelado na abertura — mesmo princípio já usado para `margem_percentual` (nunca persistido, sempre runtime).
+- **Reaproveita `estoque_service.registrar()`** (tipo `ajuste`) para gravar o ajuste real em `aprovar_final()` — decisão consciente de não criar uma tabela `stock_adjustments` separada, pra não duplicar a lógica de saldo que já existe e já é testada.
+- **Perfil Supervisor:** decisão de produto foi manter só `admin` por enquanto (não criar o perfil `supervisor` ainda), mas deixando o caminho aberto — nova constante `PERFIS_SUPERVISOR = ("admin", "supervisor")` em `core/security.py`, usada em todo endpoint de conciliação/aprovação. No dia em que o perfil `supervisor` for criado (migração + atribuição), esses endpoints já aceitam automaticamente, sem tocar em código.
+- **Endpoints novos:** `GET /{id}/operador` (painel de contagem), `PATCH /{id}/itens/{produto_id}` (registra contagem item a item — substitui o payload em lote antigo), `POST /{id}/enviar-analise` (Etapa A), `GET /{id}/conciliacao`, `PATCH /{id}/itens/{produto_id}/decisao` (aprovar/recontagem), `POST /{id}/aprovar-final` (Etapa B — só aqui o estoque real muda).
+- **Removido:** `POST /{id}/fechar` (payload em lote, ajustava na hora) e `GET /{id}/itens` genérico (expunha `qtd_sistema` sem restrição de perfil, incompatível com contagem cega) — substituídos pelos endpoints acima.
+
+**Testes rodados:**
+- Suíte completa: **263/263 passando** (257 + 6 `test_auth.py` isolado), banco de teste recriado do zero via `setup_test_db.sh` com os 3 roles reais
+- Novo arquivo `test_inventario_conciliacao.py` (8 testes): pré-população de itens na abertura, contagem cega não vaza `qtd_sistema`, `enviar-analise` não toca o estoque real, operador recebe 403 em `/conciliacao`, `aprovar-final` bloqueado com item sem decisão, fluxo completo (contar → decidir → aprovar → movimentação gravada com valor certo), recontagem solicitada libera o item mesmo com ciclo `em_analise`, isolamento de tenant em `PATCH itens/{produto_id}`
+- `test_inventario.py` e `test_inventario_painel.py` atualizados para o novo fluxo de duas etapas (antes chamavam `/fechar` direto)
+- Bandit sobre os arquivos alterados: 0 problemas
+
+**Pendência desta etapa:** só o backend está pronto. O frontend (`inventario/page.tsx`) ainda usa os endpoints antigos e precisa ser reescrito para consumir o novo fluxo — telas de Operador e Supervisor conforme o mockup já aprovado. Migração 016 já está em staging, então o frontend atual continuará funcionando com os endpoints que sobraram (`GET /painel`, `GET /aberto`, listagem), mas a tela de contagem em si vai quebrar até a próxima parte desta etapa (chama `/fechar`, que não existe mais) — **não fazer deploy do frontend atual em cima deste backend sem a Parte 2**.
+
+**Entregável (Parte 1 — backend):** `backend/migrations/016_inventario_conciliacao.sql` (novo), `backend/app/db/models.py`, `backend/app/core/security.py`, `backend/app/modules/inventario/{schemas,service,router}.py` (reescritos), `backend/tests/test_inventario.py` e `test_inventario_painel.py` (atualizados), `backend/tests/test_inventario_conciliacao.py` (novo) + zip completo do projeto.

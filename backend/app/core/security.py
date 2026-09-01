@@ -158,6 +158,15 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> CurrentUser:
     )
 
 
+# Perfis que hoje têm poder de "supervisor" (aprovar ajustes de estoque,
+# conciliar inventário etc). Por decisão de produto, isso é só 'admin' por
+# enquanto — 'supervisor' ainda não existe como perfil no banco (constraint
+# de users.perfil não inclui). Mas todo endpoint que depende dessa tupla já
+# aceita 'supervisor' automaticamente no dia em que o perfil for criado,
+# sem precisar tocar em código de novo — só a migração + atribuir o perfil.
+PERFIS_SUPERVISOR = ("admin", "supervisor")
+
+
 def require_perfil(*perfis_permitidos: str):
     """Dependência para restringir endpoints por perfil (admin/operador/leitura)."""
     def checker(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:

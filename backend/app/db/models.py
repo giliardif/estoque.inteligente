@@ -149,9 +149,15 @@ class Inventario(Base):
     id: Mapped[uuid.UUID] = _uuid_col()
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"))
     deposito_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("depositos.id"))
-    status: Mapped[str] = mapped_column(String(20), default="aberto")  # aberto | fechado
+    status: Mapped[str] = mapped_column(String(20), default="aberto")  # aberto | em_analise | fechado
     ciclo: Mapped[str] = mapped_column(String(20))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    # Trilha de auditoria (Etapa 39): quem enviou a contagem para análise
+    # (operador) e quem aprovou o ajuste real de estoque (supervisor/admin).
+    enviado_por: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    aprovado_por: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    aprovado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class InventarioItem(Base):
@@ -162,6 +168,17 @@ class InventarioItem(Base):
     qtd_sistema: Mapped[float] = mapped_column(Numeric(12, 2))
     qtd_contada: Mapped[float | None] = mapped_column(Numeric(12, 2))
     divergencia: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    # Etapa 39 — fluxo de encerramento e aprovação:
+    status_item: Mapped[str] = mapped_column(String(30), default="pendente")
+    # pendente | contado | divergente | aprovado | recontagem_solicitada
+    motivo: Mapped[str | None] = mapped_column(String(20))  # avaria | vencimento | furto | erro_entrada
+    anexo_url: Mapped[str | None] = mapped_column(Text)
+    # custo_medio do produto congelado no momento da contagem — usado para
+    # calcular o impacto financeiro em runtime (nunca persistido, mesmo
+    # princípio já usado para margem_percentual).
+    custo_unitario: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    decidido_por: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    decidido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class NotaFiscalItem(Base):

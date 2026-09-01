@@ -36,11 +36,14 @@ async def test_nao_permite_dois_inventarios_abertos_no_mesmo_deposito(client_ten
 async def test_listar_inventarios_filtra_por_status_fechado(client_tenant_a: AsyncClient, produto_com_saldo_10: str):
     inv = await client_tenant_a.post("/api/v1/inventario", json={"ciclo": "2026-06"})
     inv_id = inv.json()["id"]
-    fechar = await client_tenant_a.post(
-        f"/api/v1/inventario/{inv_id}/fechar",
-        json={"itens": [{"produto_id": produto_com_saldo_10, "qtd_contada": 10}]},
+    contagem = await client_tenant_a.patch(
+        f"/api/v1/inventario/{inv_id}/itens/{produto_com_saldo_10}", json={"qtd_contada": 10}
     )
-    assert fechar.status_code == 200
+    assert contagem.status_code == 200, contagem.text
+    enviar = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")
+    assert enviar.status_code == 200, enviar.text
+    aprovar = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/aprovar-final")
+    assert aprovar.status_code == 200, aprovar.text
 
     listagem = await client_tenant_a.get("/api/v1/inventario?status=fechado")
     assert listagem.status_code == 200

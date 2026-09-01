@@ -6,14 +6,18 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_for_tenant
-from app.core.security import CurrentUser, get_current_user, require_perfil
+from app.core.security import PERFIS_SUPERVISOR, CurrentUser, get_current_user, require_perfil
 from app.modules.inventario import service
 from app.modules.inventario.schemas import (
+    AprovacaoFinalOut,
+    ConciliacaoOut,
+    DecisaoItemIn,
+    EnviarAnaliseOut,
     InventarioAbrir,
-    InventarioFechar,
-    InventarioItemOut,
+    InventarioItemContagemIn,
     InventarioOut,
     PainelInventarioOut,
+    PainelOperadorOut,
 )
 
 router = APIRouter(prefix="/inventario", tags=["inventario"])
@@ -24,8 +28,8 @@ async def get_tenant_db(user: CurrentUser = Depends(get_current_user)) -> AsyncG
         yield session
 
 
-# IMPORTANTE: "/painel" precisa vir ANTES de "/aberto" e "/{inventario_id}/...",
-# mesma ordem usada nos demais routers com painel.
+# IMPORTANTE: rotas fixas ("/painel", "/aberto") precisam vir ANTES de
+# "/{inventario_id}/...", mesma ordem usada nos demais routers com painel.
 @router.get("/painel", response_model=PainelInventarioOut)
 async def painel_inventario(
     status_filtro: str | None = Query(default=None, alias="status"),
@@ -76,22 +80,89 @@ async def obter_inventario_aberto(
     return await service.obter_aberto(db, tenant_id=user.tenant_id, deposito_id=deposito_id)
 
 
-@router.post("/{inventario_id}/fechar", response_model=InventarioOut)
-async def fechar_inventario(
-    inventario_id: UUID,
-    payload: InventarioFechar,
-    user: CurrentUser = Depends(require_perfil("admin", "operador")),
-    db: AsyncSession = Depends(get_tenant_db),
-):
-    return await service.fechar(
-        db, tenant_id=user.tenant_id, usuario_id=user.id, inventario_id=inventario_id, dados=payload
-    )
+# --- Etapa A: tela de contagem do operador (contagem cega) -----------------
 
-
-@router.get("/{inventario_id}/itens", response_model=list[InventarioItemOut])
-async def listar_itens_inventario(
+@router.get("/{inventario_id}/operador", response_model=PainelOperadorOut)
+async def painel_operador_inventario(
     inventario_id: UUID,
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    return await service.listar_itens(db, tenant_id=user.tenant_id, inventario_id=inventario_id)
+    """Alimenta a tela de contagem: progresso, resumo (sem/com divergência/
+    pendentes) e a lista de itens — nunca inclui qtd_sistema (contagem cega)."""
+    return await service.painel_operador(db, tenant_id=user.tenant_id, inventario_id=inventario_id)
+
+
+@router.patch("/{inventario_id}/itens/{produto_id}", response_model=dict)
+async def registrar_contagem_item(
+    inventario_id: UUID,
+    produto_id: UUID,
+    payload: InventarioItemContagemIn,
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    item = await service.registrar_contagem_item(
+        db, tenant_id=user.tenant_id, inventario_id=inventario_id, produto_id=produto_id, dados=payload
+    )
+    return {
+        "produto_id": item.produto_id,
+        "qtd_contada": item.qtd_contada,
+        "divergencia": item.divergencia,
+        "status_item": item.status_item,
+    }
+
+
+@router.post("/{inventario_id}/enviar-analise", response_model=EnviarAnaliseOut)
+async def enviar_inventario_para_analise(
+    inventario_id: UUID,
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Etapa A: operador conclui a contagem. O ciclo vai para 'em_analise' —
+    nenhuma movimentação de estoque é gravada ainda."""
+    return await service.enviar_para_analise(db, tenant_id=user.tenant_id, usuario_id=user.id, inventario_id=inventario_id)
+
+
+# --- Etapa B: conciliação e aprovação do supervisor -------------------------
+
+@router.get("/{inventario_id}/conciliacao", response_model=ConciliacaoOut)
+async def obter_conciliacao_inventario(
+    inventario_id: UUID,
+    user: CurrentUser = Depends(require_perfil(*PERFIS_SUPERVISOR)),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Painel de Conciliação: qtd anterior x contada x diferença x impacto
+    financeiro. Restrito a admin (perfil supervisor, quando existir, já
+    será aceito automaticamente aqui)."""
+    return await service.obter_conciliacao(db, tenant_id=user.tenant_id, inventario_id=inventario_id)
+
+
+@router.patch("/{inventario_id}/itens/{produto_id}/decisao", response_model=dict)
+async def decidir_item_inventario(
+    inventario_id: UUID,
+    produto_id: UUID,
+    payload: DecisaoItemIn,
+    user: CurrentUser = Depends(require_perfil(*PERFIS_SUPERVISOR)),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    item = await service.decidir_item(
+        db,
+        tenant_id=user.tenant_id,
+        usuario_id=user.id,
+        inventario_id=inventario_id,
+        produto_id=produto_id,
+        acao=payload.acao,
+    )
+    return {"produto_id": item.produto_id, "status_item": item.status_item}
+
+
+@router.post("/{inventario_id}/aprovar-final", response_model=AprovacaoFinalOut)
+async def aprovar_ajuste_final_inventario(
+    inventario_id: UUID,
+    user: CurrentUser = Depends(require_perfil(*PERFIS_SUPERVISOR)),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Etapa B final: grava as movimentações de ajuste reais (tipo='ajuste')
+    e fecha o ciclo. Exige que todo item já tenha sido decidido (aprovado ou
+    sem divergência) — nenhum pendente/divergente/recontagem em aberto."""
+    return await service.aprovar_final(db, tenant_id=user.tenant_id, usuario_id=user.id, inventario_id=inventario_id)
