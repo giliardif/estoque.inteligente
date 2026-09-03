@@ -51,22 +51,44 @@ export function PainelOperadorInventario({
   const [linhaDestacadaId, setLinhaDestacadaId] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
+  const carregar = useCallback(async (opts?: { preservarValoresLocais?: boolean }) => {
+    setCarregando((c) => (opts?.preservarValoresLocais ? c : true));
     try {
       const dados = await obterPainelOperador(inventarioId);
       setPainel(dados);
-      const mapa: Record<string, string> = {};
-      dados.itens.forEach((i) => { if (i.qtd_contada !== null) mapa[i.produto_id] = String(i.qtd_contada); });
-      setValores(mapa);
+      setValores((atual) => {
+        const mapa = { ...atual };
+        dados.itens.forEach((i) => {
+          // Refetch em segundo plano (foco/polling) não deve apagar o que o
+          // operador já está digitando numa linha ainda não confirmada.
+          if (opts?.preservarValoresLocais && mapa[i.produto_id] !== undefined) return;
+          if (i.qtd_contada !== null) mapa[i.produto_id] = String(i.qtd_contada);
+        });
+        return mapa;
+      });
     } catch {
-      toastErro("Não foi possível carregar a contagem.");
+      if (!opts?.preservarValoresLocais) toastErro("Não foi possível carregar a contagem.");
     } finally {
       setCarregando(false);
     }
   }, [inventarioId, toastErro]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Recontagem pedida pela supervisão não avisa o operador em tempo real
+  // (sem push, por enquanto) — isso cobre o caso prático de "saí do app e
+  // voltei", igual ao badge do menu.
+  useEffect(() => {
+    const intervalo = setInterval(() => carregar({ preservarValoresLocais: true }), 20_000);
+    const aoFicarVisivel = () => { if (document.visibilityState === "visible") carregar({ preservarValoresLocais: true }); };
+    document.addEventListener("visibilitychange", aoFicarVisivel);
+    window.addEventListener("focus", aoFicarVisivel);
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", aoFicarVisivel);
+      window.removeEventListener("focus", aoFicarVisivel);
+    };
+  }, [carregar]);
 
   const editavel = useCallback((item: ItemOperador) => STATUS_EDITAVEIS.has(item.status_item), []);
 

@@ -18,6 +18,7 @@ from app.modules.inventario.schemas import (
     InventarioItemContagemIn,
     InventarioOut,
     JustificativaIn,
+    NotificacoesInventarioOut,
     PainelInventarioOut,
     PainelOperadorOut,
     ResultadoContagemOut,
@@ -69,6 +70,17 @@ async def listar_inventarios(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     return await service.listar(db, tenant_id=user.tenant_id, status_filtro=status_filtro, pagina=pagina, tamanho=tamanho)
+
+
+@router.get("/notificacoes", response_model=NotificacoesInventarioOut)
+async def notificacoes_inventario(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Badge leve pro menu — quantos itens estão com recontagem solicitada
+    pela supervisão. Poll frequente (a cada ~20s no frontend), por isso
+    fica bem enxuto de propósito."""
+    return await service.contar_notificacoes(db, tenant_id=user.tenant_id)
 
 
 @router.get("/aberto", response_model=InventarioOut | None)

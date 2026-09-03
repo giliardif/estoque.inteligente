@@ -479,6 +479,26 @@ async def cancelar_ciclo(db: AsyncSession, *, tenant_id: UUID, inventario_id: UU
     return inventario
 
 
+async def contar_notificacoes(db: AsyncSession, *, tenant_id: UUID) -> dict:
+    """Contagem leve pro badge do menu — quantos itens estão com recontagem
+    solicitada pela supervisão, esperando o operador agir. Somado no
+    tenant inteiro (não filtra por depósito — é só um indicador de 'tem
+    algo esperando', não um número operacional preciso)."""
+    itens_recontagem_pendente = (
+        await db.execute(
+            select(func.count())
+            .select_from(InventarioItem)
+            .join(Inventario, Inventario.id == InventarioItem.inventario_id)
+            .where(
+                Inventario.tenant_id == tenant_id,
+                Inventario.status.in_(("aberto", "em_analise")),
+                InventarioItem.status_item == "recontagem_solicitada",
+            )
+        )
+    ).scalar_one()
+    return {"itens_recontagem_pendente": itens_recontagem_pendente}
+
+
 async def listar(
     db: AsyncSession, *, tenant_id: UUID, status_filtro: str | None = None, pagina: int = 1, tamanho: int = 25
 ) -> list[Inventario]:

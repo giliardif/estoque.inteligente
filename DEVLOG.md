@@ -3138,3 +3138,21 @@ Esta entrada cobre só o **backend** das 3 pendências identificadas (Empresa, n
 **Pendência registrada, não tratada agora:** sincronizar produtos cadastrados depois da abertura de um ciclo (adicionar itens novos a um ciclo já em andamento) — combinado que fica pra depois, só resolvido o caso imediato via cancelamento.
 
 **Entregável:** `backend/migrations/018_inventario_cancelamento.sql` (novo), `backend/app/modules/inventario/{service,router}.py`, `backend/tests/test_inventario_conciliacao.py`, `frontend/lib/types.ts`, `frontend/lib/api-inventario.ts`, `frontend/components/inventario/PainelOperadorInventario.tsx`, `frontend/app/(dashboard)/inventario/page.tsx` + zip completo do projeto.
+
+---
+
+## Correção — Badge de recontagem + atualização automática
+
+**Motivo:** confirmado no banco que `PATCH .../decisao` com `acao: "recontagem"` sempre gravou certinho (`status_item`, `tentativas=0`, `decidido_por/em` todos corretos) — o problema real era o frontend do operador não se atualizar sozinho. Se a tela já estava aberta quando o supervisor decidiu, só um reload manual mostrava a mudança. Sem infraestrutura de push (PWA/service worker — ainda no backlog, fase separada), a solução foi refetch automático + um indicador visível antes mesmo de entrar na tela de contagem.
+
+**O que foi feito:**
+- **`GET /inventario/notificacoes`** (novo, leve) — conta quantos itens estão `recontagem_solicitada` no tenant inteiro (soma todos os depósitos — é só um indicador de "tem algo esperando", não um número operacional preciso). Acessível a qualquer perfil autenticado.
+- **Badge no menu lateral** — contador vermelho ao lado de "Inventário" (desktop e gaveta mobile) e um ponto vermelho no ícone de hambúrguer mobile, visível antes mesmo de abrir a tela.
+- **`useNotificacoesInventario`** (hook novo) — busca ao montar, refaz quando a aba ganha foco (`visibilitychange`/`focus`), e faz polling leve a cada 20s enquanto o app estiver aberto.
+- **Dentro da própria tela de contagem**, o mesmo padrão de refetch (foco + polling a cada 20s) atualiza os itens sem precisar sair da tela — com cuidado extra pra não apagar o que o operador estiver digitando numa linha ainda não confirmada (o refetch em segundo plano nunca sobrescreve um valor local não salvo).
+
+**Notificação push de verdade (fora do escopo desta correção):** perguntado sobre notificação tipo push/WhatsApp — expliquei que isso exige infraestrutura nova (PWA + Web Push API com VAPID, ou integração WhatsApp Business API), ambas já registradas no backlog como frentes separadas. O que foi implementado aqui é o paliativo "sem servidor extra" — resolve o caso prático relatado, não substitui push de verdade se isso virar prioridade depois.
+
+**Testes:** 1 novo (`test_notificacoes_conta_itens_com_recontagem_solicitada`) — suíte completa **271/271**. `tsc`/`next build` limpos. Bandit 0 issues.
+
+**Entregável:** `backend/app/modules/inventario/{schemas,service,router}.py`, `backend/tests/test_inventario_conciliacao.py`, `frontend/lib/api-inventario.ts`, `frontend/lib/useNotificacoesInventario.ts` (novo), `frontend/app/(dashboard)/layout.tsx`, `frontend/components/inventario/PainelOperadorInventario.tsx` + zip completo do projeto.

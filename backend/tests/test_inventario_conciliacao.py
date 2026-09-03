@@ -281,6 +281,29 @@ async def test_detalhe_ciclo_expoe_log_completo_de_tentativas(client_tenant_a: A
 
 
 @pytest.mark.asyncio
+async def test_notificacoes_conta_itens_com_recontagem_solicitada(
+    client_tenant_a: AsyncClient, produto_com_saldo_10: str
+):
+    antes = await client_tenant_a.get("/api/v1/inventario/notificacoes")
+    assert antes.status_code == 200, antes.text
+    total_antes = antes.json()["itens_recontagem_pendente"]
+
+    inv_id = await _abrir_divergir_e_manter(client_tenant_a, produto_com_saldo_10, qtd=7)
+    await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")
+    await client_tenant_a.patch(
+        f"/api/v1/inventario/{inv_id}/itens/{produto_com_saldo_10}/decisao", json={"acao": "recontagem"}
+    )
+
+    depois = await client_tenant_a.get("/api/v1/inventario/notificacoes")
+    assert depois.json()["itens_recontagem_pendente"] == total_antes + 1
+
+    # Ao recontar e resolver, sai da contagem de pendentes
+    await _contar(client_tenant_a, inv_id, produto_com_saldo_10, 10)
+    final = await client_tenant_a.get("/api/v1/inventario/notificacoes")
+    assert final.json()["itens_recontagem_pendente"] == total_antes
+
+
+@pytest.mark.asyncio
 async def test_cancelar_ciclo_vazio_com_sucesso(client_tenant_a: AsyncClient):
     inv_id = await _abrir(client_tenant_a)
     resp = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/cancelar")

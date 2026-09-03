@@ -95,6 +95,12 @@ export function aprovarAjusteFinal(inventarioId: string) {
   );
 }
 
+// --- Notificações leves (badge de recontagem no menu) -----------------------
+
+export function obterNotificacoes() {
+  return apiFetch<{ itens_recontagem_pendente: number }>(`/inventario/notificacoes`);
+}
+
 // --- Detalhes do ciclo (histórico, qualquer status) -------------------------
 
 export function obterDetalheCiclo(inventarioId: string) {

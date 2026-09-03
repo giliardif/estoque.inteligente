@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme/useTheme";
+import { useNotificacoesInventario } from "@/lib/useNotificacoesInventario";
 import ToggleTema from "@/components/ui/ToggleTema";
 import {
   LayoutGrid, Package, Boxes, ArrowLeftRight, ClipboardList, FileText,
@@ -51,11 +52,12 @@ function LogoBloco({ tema }: { tema: ReturnType<typeof useTheme> }) {
   );
 }
 
-function NavLista({ pathname, onNavegar, itens }: { pathname: string | null; onNavegar?: () => void; itens: typeof nav }) {
+function NavLista({ pathname, onNavegar, itens, badges }: { pathname: string | null; onNavegar?: () => void; itens: typeof nav; badges?: Record<string, number> }) {
   return (
     <nav className="flex flex-col gap-0.5">
       {itens.map((item) => {
         const ativo = item.href === "/" ? pathname === "/" : pathname?.startsWith(item.href);
+        const badge = badges?.[item.href];
         return (
           <Link
             key={item.href}
@@ -70,6 +72,14 @@ function NavLista({ pathname, onNavegar, itens }: { pathname: string | null; onN
           >
             <item.icon size={16} strokeWidth={1.9} />
             {item.label}
+            {!!badge && (
+              <span
+                className="ml-auto text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center"
+                style={{ background: "var(--cor-alerta, #A23B3B)", color: "#fff" }}
+              >
+                {badge}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -83,6 +93,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [menuAberto, setMenuAberto] = useState(false);
+  const { itensRecontagemPendente } = useNotificacoesInventario();
+  const badges = { "/inventario": itensRecontagemPendente };
 
   useEffect(() => {
     // Proteção de rota no client: se não há usuário autenticado em memória,
@@ -116,10 +128,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <button
           onClick={() => setMenuAberto(true)}
           aria-label="Abrir menu"
-          className="p-1 -ml-1"
+          className="p-1 -ml-1 relative"
           style={{ color: "var(--cor-texto)" }}
         >
           <Menu size={22} />
+          {itensRecontagemPendente > 0 && (
+            <span
+              className="absolute top-0 right-0 w-2 h-2 rounded-full"
+              style={{ background: "var(--cor-alerta, #A23B3B)" }}
+              aria-hidden
+            />
+          )}
         </button>
         <LogoBloco tema={tema} />
         <ToggleTema compacto />
@@ -131,7 +150,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)" }}
       >
         <LogoBloco tema={tema} />
-        <NavLista pathname={pathname} itens={itensNav} />
+        <NavLista pathname={pathname} itens={itensNav} badges={badges} />
         <div className="mt-auto flex flex-col gap-2">
           <ToggleTema />
           <button
@@ -165,7 +184,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 <X size={20} />
               </button>
             </div>
-            <NavLista pathname={pathname} onNavegar={() => setMenuAberto(false)} itens={itensNav} />
+            <NavLista pathname={pathname} onNavegar={() => setMenuAberto(false)} itens={itensNav} badges={badges} />
             <div className="mt-auto flex flex-col gap-2">
               <ToggleTema />
               <button

@@ -196,3 +196,9 @@ class PainelInventarioOut(BaseModel):
     total: int
     pagina: int
     tamanho: int
+
+
+# --- Notificações leves (Etapa 39.1 — badge de recontagem no menu) ---------
+
+class NotificacoesInventarioOut(BaseModel):
+    itens_recontagem_pendente: int
