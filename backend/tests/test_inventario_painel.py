@@ -16,9 +16,11 @@ async def _fechar_ciclo_simples(client_tenant_a: AsyncClient, ciclo: str, produt
     aprova automaticamente (usada nos testes que só precisam do estado final)."""
     inv = await client_tenant_a.post("/api/v1/inventario", json={"ciclo": ciclo})
     inv_id = inv.json()["id"]
-    await client_tenant_a.patch(f"/api/v1/inventario/{inv_id}/itens/{produto_id}", json={"qtd_contada": qtd_contada})
-    await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")
+    await client_tenant_a.patch(f"/api/v1/inventario/{inv_id}/itens/{produto_id}/contagem", json={"qtd_contada": qtd_contada})
     if qtd_contada != 10:  # produto_com_saldo_10 sempre parte de saldo 10 — diverge se != 10
+        await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/itens/{produto_id}/manter-divergencia")
+    await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")
+    if qtd_contada != 10:
         await client_tenant_a.patch(f"/api/v1/inventario/{inv_id}/itens/{produto_id}/decisao", json={"acao": "aprovar"})
     aprovar = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/aprovar-final")
     assert aprovar.status_code == 200, aprovar.text

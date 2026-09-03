@@ -1,22 +1,43 @@
 import { apiFetch, obterAccessToken } from "@/lib/api";
-import { Conciliacao, InventarioCiclo, MotivoDivergencia, PainelOperador, StatusItemInventario } from "@/lib/types";
+import {
+  Conciliacao, DetalheCiclo, InventarioCiclo, MotivoDivergencia, PainelOperador, ResultadoContagem,
+  StatusItemInventario,
+} from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
-// --- Etapa A: operador ------------------------------------------------------
+// --- Etapa A: operador -------------------------------------------------------
 
 export function obterPainelOperador(inventarioId: string) {
   return apiFetch<PainelOperador>(`/inventario/${inventarioId}/operador`);
 }
 
-export function registrarContagemItem(
-  inventarioId: string,
-  produtoId: string,
-  dados: { qtd_contada: number; motivo?: MotivoDivergencia | null; anexo_url?: string | null }
+// Etapa 39.1 — cada chamada aqui é uma tentativa de contagem (logada no
+// backend), não um autosave de digitação. Só chamar quando o operador
+// aperta "Confirmar" na linha.
+export function registrarContagemItem(inventarioId: string, produtoId: string, qtdContada: number) {
+  return apiFetch<ResultadoContagem>(`/inventario/${inventarioId}/itens/${produtoId}/contagem`, {
+    method: "PATCH",
+    body: JSON.stringify({ qtd_contada: qtdContada }),
+  });
+}
+
+// Operador decide não recontar mais — aceita a última contagem como
+// divergência final, sem consumir mais uma tentativa.
+export function manterDivergencia(inventarioId: string, produtoId: string) {
+  return apiFetch<ResultadoContagem>(`/inventario/${inventarioId}/itens/${produtoId}/manter-divergencia`, {
+    method: "POST",
+  });
+}
+
+// Só pode ser chamado depois do item já estar finalizado como divergente —
+// nunca durante a digitação da contagem.
+export function registrarJustificativa(
+  inventarioId: string, produtoId: string, motivo: MotivoDivergencia, anexoUrl: string | null
 ) {
-  return apiFetch<{ produto_id: string; qtd_contada: number; divergencia: number | null; status_item: StatusItemInventario }>(
-    `/inventario/${inventarioId}/itens/${produtoId}`,
-    { method: "PATCH", body: JSON.stringify(dados) }
+  return apiFetch<{ produto_id: string; motivo: MotivoDivergencia; anexo_url: string | null }>(
+    `/inventario/${inventarioId}/itens/${produtoId}/justificativa`,
+    { method: "PATCH", body: JSON.stringify({ motivo, anexo_url: anexoUrl }) }
   );
 }
 
@@ -66,4 +87,10 @@ export function aprovarAjusteFinal(inventarioId: string) {
     `/inventario/${inventarioId}/aprovar-final`,
     { method: "POST" }
   );
+}
+
+// --- Detalhes do ciclo (histórico, qualquer status) -------------------------
+
+export function obterDetalheCiclo(inventarioId: string) {
+  return apiFetch<DetalheCiclo>(`/inventario/${inventarioId}/detalhe`);
 }

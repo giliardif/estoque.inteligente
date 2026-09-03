@@ -10,6 +10,7 @@ import { Search, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { PainelOperadorInventario } from "@/components/inventario/PainelOperadorInventario";
 import { PainelConciliacaoInventario } from "@/components/inventario/PainelConciliacaoInventario";
+import { DetalheCicloModal } from "@/components/inventario/DetalheCicloModal";
 
 const TAMANHO_PAGINA = 25;
 
@@ -40,6 +41,7 @@ export default function InventarioPage() {
   const [pagina, setPagina] = useState(1);
   const [ordenarPor, setOrdenarPor] = useState("criado_em");
   const [direcao, setDirecao] = useState<"asc" | "desc">("desc");
+  const [detalheAbertoId, setDetalheAbertoId] = useState<string | null>(null);
 
   const buscaRef = useRef<HTMLInputElement>(null);
 
@@ -227,7 +229,9 @@ export default function InventarioPage() {
               : "Nenhum inventário encontrado com esses filtros."}
           </div>
         )}
-        {!carregando && itensLista.map((inv) => <CardInventario key={inv.id} inv={inv} />)}
+        {!carregando && itensLista.map((inv) => (
+          <CardInventario key={inv.id} inv={inv} clicavel={ehSupervisor} onClick={() => ehSupervisor && setDetalheAbertoId(inv.id)} />
+        ))}
         {painel && painel.total > 0 && (
           <div className="rounded-xl border" style={{ borderColor: "var(--cor-borda)" }}>
             <Pagination pagina={pagina} tamanhoPagina={TAMANHO_PAGINA} total={painel.total} onPaginaChange={setPagina} />
@@ -261,7 +265,7 @@ export default function InventarioPage() {
               </tr>
             )}
             {!carregando && itensLista.map((inv) => (
-              <TrHover key={inv.id}>
+              <TrHover key={inv.id} onClick={ehSupervisor ? () => setDetalheAbertoId(inv.id) : undefined}>
                 <td className="px-5 py-3 font-medium">{inv.ciclo}</td>
                 <td className="px-3 py-3" style={{ color: "var(--cor-texto-muted)" }}>{inv.deposito_nome ?? "Padrão"}</td>
                 <td className="px-3 py-3"><StatusBadge status={inv.status} /></td>
@@ -279,13 +283,19 @@ export default function InventarioPage() {
           <Pagination pagina={pagina} tamanhoPagina={TAMANHO_PAGINA} total={painel.total} onPaginaChange={setPagina} />
         )}
       </div>
+
+      {detalheAbertoId && <DetalheCicloModal inventarioId={detalheAbertoId} onFechar={() => setDetalheAbertoId(null)} />}
     </div>
   );
 }
 
-function CardInventario({ inv }: { inv: InventarioListaItem }) {
+function CardInventario({ inv, clicavel, onClick }: { inv: InventarioListaItem; clicavel?: boolean; onClick?: () => void }) {
   return (
-    <div className="rounded-xl border p-3.5 flex flex-col gap-2.5" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }}>
+    <div
+      className="rounded-xl border p-3.5 flex flex-col gap-2.5"
+      style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)", cursor: clicavel ? "pointer" : undefined }}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium text-sm truncate">Ciclo {inv.ciclo}</div>
@@ -301,6 +311,7 @@ function CardInventario({ inv }: { inv: InventarioListaItem }) {
           {new Date(inv.criado_em).toLocaleDateString("pt-BR")}
         </span>
       </div>
+      {clicavel && <div className="text-[11px] text-center" style={{ color: "var(--cor-acento)" }}>Toque para ver os detalhes</div>}
     </div>
   );
 }

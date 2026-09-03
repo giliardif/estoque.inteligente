@@ -37,7 +37,7 @@ async def test_listar_inventarios_filtra_por_status_fechado(client_tenant_a: Asy
     inv = await client_tenant_a.post("/api/v1/inventario", json={"ciclo": "2026-06"})
     inv_id = inv.json()["id"]
     contagem = await client_tenant_a.patch(
-        f"/api/v1/inventario/{inv_id}/itens/{produto_com_saldo_10}", json={"qtd_contada": 10}
+        f"/api/v1/inventario/{inv_id}/itens/{produto_com_saldo_10}/contagem", json={"qtd_contada": 10}
     )
     assert contagem.status_code == 200, contagem.text
     enviar = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")

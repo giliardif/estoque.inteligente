@@ -6,7 +6,7 @@ Produto.campos_customizados (JSONB), nunca como coluna nova nestes models.
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -170,7 +170,8 @@ class InventarioItem(Base):
     divergencia: Mapped[float | None] = mapped_column(Numeric(12, 2))
     # Etapa 39 — fluxo de encerramento e aprovação:
     status_item: Mapped[str] = mapped_column(String(30), default="pendente")
-    # pendente | contado | divergente | aprovado | recontagem_solicitada
+    # pendente | aguardando_confirmacao | contado | divergente | aprovado | recontagem_solicitada
+    tentativas: Mapped[int] = mapped_column(Integer, default=0)
     motivo: Mapped[str | None] = mapped_column(String(20))  # avaria | vencimento | furto | erro_entrada
     anexo_url: Mapped[str | None] = mapped_column(Text)
     # custo_medio do produto congelado no momento da contagem — usado para
@@ -179,6 +180,22 @@ class InventarioItem(Base):
     custo_unitario: Mapped[float | None] = mapped_column(Numeric(12, 2))
     decidido_por: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     decidido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class InventarioItemTentativa(Base):
+    """Log de cada tentativa de contagem de um item (até 3 — Etapa 39.1),
+    independente do resultado final. Sustenta a tela de Detalhes do Ciclo:
+    dá pra consultar depois quantas vezes um item foi contado e o que deu
+    em cada rodada, não só o valor consolidado."""
+    __tablename__ = "inventario_item_tentativas"
+    id: Mapped[uuid.UUID] = _uuid_col()
+    inventario_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("inventario_itens.id", ondelete="CASCADE")
+    )
+    numero_tentativa: Mapped[int] = mapped_column(Integer)
+    qtd_contada: Mapped[float] = mapped_column(Numeric(12, 2))
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 class NotaFiscalItem(Base):

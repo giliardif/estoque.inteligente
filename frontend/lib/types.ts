@@ -290,17 +290,26 @@ export type InventarioCiclo = {
 
 export type MotivoDivergencia = "avaria" | "vencimento" | "furto" | "erro_entrada";
 
-export type StatusItemInventario = "pendente" | "contado" | "divergente" | "aprovado" | "recontagem_solicitada";
+export type StatusItemInventario =
+  | "pendente"
+  | "aguardando_confirmacao"
+  | "contado"
+  | "divergente"
+  | "aprovado"
+  | "recontagem_solicitada";
 
-// Contagem cega: nunca inclui qtd_sistema, de propósito.
+export const LIMITE_TENTATIVAS = 3;
+
+// Contagem cega de verdade (Etapa 39.1): nunca inclui qtd_sistema NEM
+// divergencia — só o status_item e quantas tentativas já foram usadas.
 export type ItemOperador = {
   produto_id: string;
   produto_nome: string;
   codigo_barras: string | null;
   categoria_nome: string | null;
   qtd_contada: number | null;
-  divergencia: number | null;
   status_item: StatusItemInventario;
+  tentativas: number;
   motivo: MotivoDivergencia | null;
   anexo_url: string | null;
 };
@@ -312,6 +321,13 @@ export type PainelOperador = {
   itens: ItemOperador[];
 };
 
+export type ResultadoContagem = {
+  produto_id: string;
+  status_item: StatusItemInventario;
+  tentativas: number;
+  limite_atingido: boolean;
+};
+
 export type ItemConciliacao = {
   produto_id: string;
   produto_nome: string;
@@ -321,6 +337,7 @@ export type ItemConciliacao = {
   divergencia: number | null;
   impacto_financeiro: number | null;
   status_item: StatusItemInventario;
+  tentativas: number;
   motivo: MotivoDivergencia | null;
   anexo_url: string | null;
   decidido_por_nome: string | null;
@@ -332,6 +349,25 @@ export type Conciliacao = {
   enviado_por_nome: string | null;
   kpis: { itens_divergentes: number; itens_aguardando_decisao: number; impacto_financeiro_total: number };
   itens: ItemConciliacao[];
+};
+
+// --- Detalhes do ciclo (histórico, qualquer status) -------------------------
+
+export type TentativaLog = {
+  numero_tentativa: number;
+  qtd_contada: number;
+  usuario_nome: string | null;
+  criado_em: string;
+};
+
+export type ItemDetalhe = ItemConciliacao & { tentativas_log: TentativaLog[] };
+
+export type DetalheCiclo = {
+  inventario: InventarioCiclo;
+  enviado_por_nome: string | null;
+  aprovado_por_nome: string | null;
+  kpis: { itens_divergentes: number; itens_aguardando_decisao: number; impacto_financeiro_total: number };
+  itens: ItemDetalhe[];
 };
 
 // --- Painel da tela de Alertas ----------------------------------------------

@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import {
-  enviarAnexoItem, enviarParaAnalise, obterPainelOperador, registrarContagemItem,
+  enviarAnexoItem, enviarParaAnalise, manterDivergencia, obterPainelOperador, registrarContagemItem,
+  registrarJustificativa,
 } from "@/lib/api-inventario";
-import { ItemOperador, MotivoDivergencia, PainelOperador as PainelOperadorTipo } from "@/lib/types";
+import { ItemOperador, LIMITE_TENTATIVAS, MotivoDivergencia, PainelOperador as PainelOperadorTipo } from "@/lib/types";
 import { useToast, ConfirmDialog } from "@/components/ui";
-import { Paperclip, ScanBarcode, Minus, Plus, Camera } from "lucide-react";
+import { Paperclip, ScanBarcode, Minus, Plus, Camera, Check } from "lucide-react";
 import { ScannerCodigo } from "@/components/scanner/ScannerCodigo";
 import { useLeitorFisico } from "@/lib/useLeitorFisico";
 
@@ -19,6 +20,9 @@ const MOTIVOS: { valor: MotivoDivergencia; label: string }[] = [
 ];
 
 type FiltroStatus = "todos" | "pendente" | "contados" | "divergentes";
+
+// Itens nesse conjunto ainda podem receber uma nova tentativa de contagem.
+const STATUS_EDITAVEIS = new Set(["pendente", "aguardando_confirmacao", "recontagem_solicitada"]);
 
 export function PainelOperadorInventario({
   inventarioId,
@@ -32,8 +36,10 @@ export function PainelOperadorInventario({
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<FiltroStatus>("todos");
-  const [contagemLocal, setContagemLocal] = useState<Record<string, string>>({});
-  const [salvandoId, setSalvandoId] = useState<string | null>(null);
+  const [valores, setValores] = useState<Record<string, string>>({});
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
+  const [itemAguardandoDecisao, setItemAguardandoDecisao] = useState<ItemOperador | null>(null);
+  const [processandoDecisao, setProcessandoDecisao] = useState(false);
   const [itemJustificativa, setItemJustificativa] = useState<ItemOperador | null>(null);
   const [confirmandoEnvio, setConfirmandoEnvio] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -48,7 +54,7 @@ export function PainelOperadorInventario({
       setPainel(dados);
       const mapa: Record<string, string> = {};
       dados.itens.forEach((i) => { if (i.qtd_contada !== null) mapa[i.produto_id] = String(i.qtd_contada); });
-      setContagemLocal(mapa);
+      setValores(mapa);
     } catch {
       toastErro("Não foi possível carregar a contagem.");
     } finally {
@@ -58,53 +64,80 @@ export function PainelOperadorInventario({
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const podeContarItem = useCallback(
-    (item: ItemOperador) => {
-      if (!painel) return false;
-      if (painel.inventario.status === "aberto") return true;
-      return painel.inventario.status === "em_analise" && item.status_item === "recontagem_solicitada";
-    },
-    [painel]
-  );
+  const editavel = useCallback((item: ItemOperador) => STATUS_EDITAVEIS.has(item.status_item), []);
 
-  async function salvarContagem(item: ItemOperador, qtdStr: string) {
-    if (qtdStr === "" || Number.isNaN(Number(qtdStr))) return;
-    setSalvandoId(item.produto_id);
+  function atualizarItem(produtoId: string, patch: Partial<ItemOperador>) {
+    setPainel((atual) => {
+      if (!atual) return atual;
+      const itens = atual.itens.map((i) => (i.produto_id === produtoId ? { ...i, ...patch } : i));
+      const contados = itens.filter((i) => i.status_item !== "pendente" && i.status_item !== "aguardando_confirmacao").length;
+      const semDivergencia = itens.filter((i) => i.status_item === "contado" || i.status_item === "aprovado").length;
+      const comDivergencia = itens.filter((i) => i.status_item === "divergente" || i.status_item === "recontagem_solicitada").length;
+      return {
+        ...atual,
+        itens,
+        progresso: { total: itens.length, contados, percentual: itens.length ? Math.round((contados / itens.length) * 1000) / 10 : 0 },
+        resumo: { sem_divergencia: semDivergencia, com_divergencia: comDivergencia, pendentes: itens.length - contados - itens.filter((i) => i.status_item === "aguardando_confirmacao").length },
+      };
+    });
+  }
+
+  async function confirmarLinha(item: ItemOperador) {
+    const valorStr = valores[item.produto_id] ?? "";
+    if (valorStr === "" || Number.isNaN(Number(valorStr))) {
+      toastErro("Digite uma quantidade antes de confirmar.");
+      return;
+    }
+    setConfirmandoId(item.produto_id);
     try {
-      const resultado = await registrarContagemItem(inventarioId, item.produto_id, { qtd_contada: Number(qtdStr) });
-      setPainel((atual) => {
-        if (!atual) return atual;
-        const itens = atual.itens.map((i) =>
-          i.produto_id === item.produto_id
-            ? { ...i, qtd_contada: resultado.qtd_contada, divergencia: resultado.divergencia, status_item: resultado.status_item }
-            : i
-        );
-        const contados = itens.filter((i) => i.status_item !== "pendente").length;
-        const semDivergencia = itens.filter((i) => i.status_item === "contado" || i.status_item === "aprovado").length;
-        const comDivergencia = itens.filter((i) => i.status_item === "divergente" || i.status_item === "recontagem_solicitada").length;
-        return {
-          ...atual,
-          itens,
-          progresso: { total: itens.length, contados, percentual: itens.length ? Math.round((contados / itens.length) * 1000) / 10 : 0 },
-          resumo: { sem_divergencia: semDivergencia, com_divergencia: comDivergencia, pendentes: itens.length - contados },
-        };
-      });
-      if (resultado.status_item === "divergente" && !item.motivo) {
-        setItemJustificativa({ ...item, qtd_contada: resultado.qtd_contada, divergencia: resultado.divergencia, status_item: resultado.status_item });
+      const resultado = await registrarContagemItem(inventarioId, item.produto_id, Number(valorStr));
+      atualizarItem(item.produto_id, { status_item: resultado.status_item, tentativas: resultado.tentativas, qtd_contada: Number(valorStr) });
+
+      if (resultado.status_item === "aguardando_confirmacao") {
+        setItemAguardandoDecisao({ ...item, status_item: resultado.status_item, tentativas: resultado.tentativas });
+      } else if (resultado.status_item === "divergente" && resultado.limite_atingido) {
+        toastErro(`Limite de ${LIMITE_TENTATIVAS} tentativas atingido — divergência registrada para análise da supervisão.`);
+        setItemJustificativa({ ...item, status_item: "divergente", tentativas: resultado.tentativas });
       }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Não foi possível salvar a contagem.";
       toastErro(msg);
     } finally {
-      setSalvandoId(null);
+      setConfirmandoId(null);
     }
   }
 
   function ajustarQtd(item: ItemOperador, delta: number) {
-    const atual = Number(contagemLocal[item.produto_id] ?? item.qtd_contada ?? 0);
+    const atual = Number(valores[item.produto_id] ?? item.qtd_contada ?? 0);
     const novo = Math.max(0, atual + delta);
-    setContagemLocal((c) => ({ ...c, [item.produto_id]: String(novo) }));
-    salvarContagem(item, String(novo));
+    setValores((v) => ({ ...v, [item.produto_id]: String(novo) }));
+  }
+
+  async function recontar() {
+    // Recontar não chama a API — só limpa o campo pra uma nova tentativa
+    // (a tentativa anterior já ficou registrada no log, independente disso).
+    if (itemAguardandoDecisao) {
+      setValores((v) => ({ ...v, [itemAguardandoDecisao.produto_id]: "" }));
+      setTimeout(() => inputRefs.current[itemAguardandoDecisao.produto_id]?.focus(), 50);
+    }
+    setItemAguardandoDecisao(null);
+  }
+
+  async function manterContagemAtual() {
+    if (!itemAguardandoDecisao) return;
+    setProcessandoDecisao(true);
+    try {
+      const resultado = await manterDivergencia(inventarioId, itemAguardandoDecisao.produto_id);
+      atualizarItem(itemAguardandoDecisao.produto_id, { status_item: resultado.status_item, tentativas: resultado.tentativas });
+      const itemFinalizado = { ...itemAguardandoDecisao, status_item: resultado.status_item as "divergente" };
+      setItemAguardandoDecisao(null);
+      setItemJustificativa(itemFinalizado);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Não foi possível registrar a decisão.";
+      toastErro(msg);
+    } finally {
+      setProcessandoDecisao(false);
+    }
   }
 
   function localizarProduto(produtoId: string) {
@@ -244,14 +277,14 @@ export function PainelOperadorInventario({
           <LinhaItemOperador
             key={item.produto_id}
             item={item}
-            editavel={podeContarItem(item)}
+            editavel={editavel(item)}
             destacada={linhaDestacadaId === item.produto_id}
-            valor={contagemLocal[item.produto_id] ?? ""}
-            salvando={salvandoId === item.produto_id}
+            valor={valores[item.produto_id] ?? ""}
+            confirmando={confirmandoId === item.produto_id}
             inputRef={(el) => { inputRefs.current[item.produto_id] = el; }}
-            onChange={(v) => setContagemLocal((c) => ({ ...c, [item.produto_id]: v }))}
-            onBlurSalvar={() => salvarContagem(item, contagemLocal[item.produto_id] ?? "")}
+            onChange={(v) => setValores((val) => ({ ...val, [item.produto_id]: v }))}
             onAjustar={(delta) => ajustarQtd(item, delta)}
+            onConfirmar={() => confirmarLinha(item)}
             onAbrirJustificativa={() => setItemJustificativa(item)}
           />
         ))}
@@ -269,11 +302,26 @@ export function PainelOperadorInventario({
           inventarioId={inventarioId}
           onFechar={() => setItemJustificativa(null)}
           onSalvo={(motivo, anexoUrl) => {
-            setPainel((atual) => atual ? { ...atual, itens: atual.itens.map((i) => i.produto_id === itemJustificativa.produto_id ? { ...i, motivo, anexo_url: anexoUrl } : i) } : atual);
+            atualizarItem(itemJustificativa.produto_id, { motivo, anexo_url: anexoUrl });
             setItemJustificativa(null);
           }}
         />
       )}
+
+      <ConfirmDialog
+        aberto={!!itemAguardandoDecisao}
+        titulo="Quantidade divergente"
+        descricao={
+          itemAguardandoDecisao
+            ? `A contagem de "${itemAguardandoDecisao.produto_nome}" não bateu (tentativa ${itemAguardandoDecisao.tentativas} de ${LIMITE_TENTATIVAS}). Deseja recontar ou manter essa contagem?`
+            : undefined
+        }
+        labelCancelar="Recontar"
+        labelConfirmar="Manter esta contagem"
+        confirmando={processandoDecisao}
+        onConfirmar={manterContagemAtual}
+        onCancelar={recontar}
+      />
 
       <ConfirmDialog
         aberto={confirmandoEnvio}
@@ -307,33 +355,37 @@ function BadgeStatusItem({ item }: { item: ItemOperador }) {
   if (item.status_item === "aprovado") {
     return <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-sucesso)", background: "rgba(16,185,129,0.14)" }}>Ajuste aprovado</span>;
   }
-  const div = item.divergencia ?? 0;
-  if (div === 0) {
-    return <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-sucesso)", background: "rgba(16,185,129,0.14)" }}>Batido</span>;
+  if (item.status_item === "divergente") {
+    // Genérico de propósito — nunca mostra sinal/magnitude pro operador.
+    return <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-alerta)", background: "rgba(162,59,59,0.14)" }}>Divergente</span>;
   }
-  return (
-    <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-alerta)", background: "rgba(162,59,59,0.14)" }}>
-      {div > 0 ? `Sobra +${div}` : `Perda ${div}`}
-    </span>
-  );
+  if (item.status_item === "aguardando_confirmacao") {
+    return <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "#F59E0B", background: "rgba(245,158,11,0.16)" }}>Decidindo...</span>;
+  }
+  return <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-sucesso)", background: "rgba(16,185,129,0.14)" }}>Batido</span>;
 }
 
 function LinhaItemOperador({
-  item, editavel, destacada, valor, salvando, inputRef, onChange, onBlurSalvar, onAjustar, onAbrirJustificativa,
+  item, editavel, destacada, valor, confirmando, inputRef, onChange, onAjustar, onConfirmar, onAbrirJustificativa,
 }: {
-  item: ItemOperador; editavel: boolean; destacada: boolean; valor: string; salvando: boolean;
+  item: ItemOperador; editavel: boolean; destacada: boolean; valor: string; confirmando: boolean;
   inputRef: (el: HTMLInputElement | null) => void;
-  onChange: (v: string) => void; onBlurSalvar: () => void; onAjustar: (delta: number) => void; onAbrirJustificativa: () => void;
+  onChange: (v: string) => void; onAjustar: (delta: number) => void; onConfirmar: () => void; onAbrirJustificativa: () => void;
 }) {
-  const temJustificativa = item.status_item === "divergente" || item.status_item === "recontagem_solicitada" || item.status_item === "aprovado";
+  const podeJustificar = item.status_item === "divergente";
   return (
     <div
-      className="flex items-center justify-between gap-3 px-5 py-2.5 transition-colors"
+      className="flex items-center justify-between gap-2 px-5 py-2.5 transition-colors flex-wrap"
       style={{ borderTop: "1px solid var(--cor-borda)", background: destacada ? "rgba(16,185,129,0.18)" : "transparent" }}
     >
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium truncate">{item.produto_nome}</div>
-        {item.codigo_barras && <div className="text-xs font-mono" style={{ color: "var(--cor-texto-muted)" }}>{item.codigo_barras}</div>}
+        <div className="flex items-center gap-2">
+          {item.codigo_barras && <span className="text-xs font-mono" style={{ color: "var(--cor-texto-muted)" }}>{item.codigo_barras}</span>}
+          {item.tentativas > 0 && item.status_item !== "contado" && (
+            <span className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>· tentativa {item.tentativas}/3</span>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         <button disabled={!editavel} onClick={() => onAjustar(-1)} className="w-6 h-6 rounded-md border text-sm disabled:opacity-40" style={{ borderColor: "var(--cor-borda)" }}>
@@ -345,7 +397,6 @@ function LinhaItemOperador({
           disabled={!editavel}
           value={valor}
           onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlurSalvar}
           placeholder="—"
           className="rounded-md px-2 py-1 text-sm outline-none border w-16 text-center disabled:opacity-60"
           style={{ background: "var(--cor-base)", borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}
@@ -353,12 +404,23 @@ function LinhaItemOperador({
         <button disabled={!editavel} onClick={() => onAjustar(1)} className="w-6 h-6 rounded-md border text-sm disabled:opacity-40" style={{ borderColor: "var(--cor-borda)" }}>
           <Plus size={12} className="mx-auto" />
         </button>
+        {editavel && (
+          <button
+            onClick={onConfirmar}
+            disabled={confirmando || valor === ""}
+            title="Confirmar contagem"
+            className="w-7 h-7 rounded-md flex items-center justify-center disabled:opacity-40"
+            style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
+          >
+            <Check size={14} />
+          </button>
+        )}
       </div>
-      <div className="w-28 text-right shrink-0">{salvando ? <span className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>Salvando...</span> : <BadgeStatusItem item={item} />}</div>
+      <div className="w-28 text-right shrink-0">{confirmando ? <span className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>Salvando...</span> : <BadgeStatusItem item={item} />}</div>
       <button
         onClick={onAbrirJustificativa}
         className="shrink-0"
-        style={{ color: item.motivo ? "var(--cor-acento)" : "var(--cor-texto-muted)", visibility: temJustificativa || item.status_item === "divergente" ? "visible" : "hidden" }}
+        style={{ color: item.motivo ? "var(--cor-acento)" : "var(--cor-texto-muted)", visibility: podeJustificar ? "visible" : "hidden" }}
         title={item.motivo ? "Justificativa registrada" : "Justificar divergência"}
       >
         <Paperclip size={15} />
@@ -383,9 +445,7 @@ function ModalJustificativa({
     try {
       let anexoUrl: string | null = item.anexo_url;
       if (arquivo) anexoUrl = await enviarAnexoItem(inventarioId, item.produto_id, arquivo);
-      await registrarContagemItem(inventarioId, item.produto_id, {
-        qtd_contada: item.qtd_contada ?? 0, motivo, anexo_url: anexoUrl,
-      });
+      await registrarJustificativa(inventarioId, item.produto_id, motivo, anexoUrl);
       onSalvo(motivo, anexoUrl);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Não foi possível salvar a justificativa.";
@@ -399,7 +459,7 @@ function ModalJustificativa({
     <div className="fixed inset-0 z-[90] flex items-center justify-center px-4" style={{ background: "rgba(10,8,6,0.55)" }} onClick={onFechar}>
       <div className="w-full max-w-sm rounded-xl border p-5 flex flex-col gap-3" style={{ background: "var(--cor-superficie)", borderColor: "var(--cor-borda)" }} onClick={(e) => e.stopPropagation()}>
         <div>
-          <h2 className="text-sm font-semibold">Justificar divergência</h2>
+          <h2 className="text-sm font-semibold">Este item ficou com divergência</h2>
           <p className="text-sm mt-1" style={{ color: "var(--cor-texto-muted)" }}>{item.produto_nome}</p>
         </div>
         <label className="text-xs font-semibold flex flex-col gap-1" style={{ color: "var(--cor-texto-muted)" }}>
@@ -422,7 +482,7 @@ function ModalJustificativa({
           </div>
         </label>
         <div className="flex justify-end gap-2 mt-1">
-          <button onClick={onFechar} disabled={salvando} className="rounded-md px-3.5 py-2 text-sm font-semibold border disabled:opacity-60" style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}>Cancelar</button>
+          <button onClick={onFechar} disabled={salvando} className="rounded-md px-3.5 py-2 text-sm font-semibold border disabled:opacity-60" style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto)" }}>Agora não</button>
           <button onClick={salvar} disabled={salvando} className="rounded-md px-3.5 py-2 text-sm font-bold disabled:opacity-60" style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}>
             {salvando ? "Salvando..." : "Salvar justificativa"}
           </button>

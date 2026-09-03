@@ -1,5 +1,4 @@
 from collections.abc import AsyncGenerator
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, UploadFile
@@ -13,12 +12,15 @@ from app.modules.inventario.schemas import (
     AprovacaoFinalOut,
     ConciliacaoOut,
     DecisaoItemIn,
+    DetalheCicloOut,
     EnviarAnaliseOut,
     InventarioAbrir,
     InventarioItemContagemIn,
     InventarioOut,
+    JustificativaIn,
     PainelInventarioOut,
     PainelOperadorOut,
+    ResultadoContagemOut,
 )
 
 router = APIRouter(prefix="/inventario", tags=["inventario"])
@@ -75,9 +77,6 @@ async def obter_inventario_aberto(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Retorna o inventário em aberto para o depósito informado (ou o inventário
-    sem depósito específico), ou null se não houver nenhum — usado pelo
-    frontend para retomar uma contagem em andamento ao carregar a tela."""
     return await service.obter_aberto(db, tenant_id=user.tenant_id, deposito_id=deposito_id)
 
 
@@ -89,12 +88,10 @@ async def painel_operador_inventario(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Alimenta a tela de contagem: progresso, resumo (sem/com divergência/
-    pendentes) e a lista de itens — nunca inclui qtd_sistema (contagem cega)."""
     return await service.painel_operador(db, tenant_id=user.tenant_id, inventario_id=inventario_id)
 
 
-@router.patch("/{inventario_id}/itens/{produto_id}", response_model=dict)
+@router.patch("/{inventario_id}/itens/{produto_id}/contagem", response_model=ResultadoContagemOut)
 async def registrar_contagem_item(
     inventario_id: UUID,
     produto_id: UUID,
@@ -102,15 +99,54 @@ async def registrar_contagem_item(
     user: CurrentUser = Depends(require_perfil("admin", "operador")),
     db: AsyncSession = Depends(get_tenant_db),
 ):
+    """Cada chamada é uma tentativa (logada) — o frontend só chama isso
+    quando o operador aperta 'Confirmar' na linha, nunca a cada +/-."""
     item = await service.registrar_contagem_item(
-        db, tenant_id=user.tenant_id, inventario_id=inventario_id, produto_id=produto_id, dados=payload
+        db, tenant_id=user.tenant_id, usuario_id=user.id, inventario_id=inventario_id, produto_id=produto_id,
+        dados=payload,
     )
     return {
         "produto_id": item.produto_id,
-        "qtd_contada": item.qtd_contada,
-        "divergencia": item.divergencia,
         "status_item": item.status_item,
+        "tentativas": item.tentativas,
+        "limite_atingido": item.tentativas >= 3,
     }
+
+
+@router.post("/{inventario_id}/itens/{produto_id}/manter-divergencia", response_model=ResultadoContagemOut)
+async def manter_divergencia_item(
+    inventario_id: UUID,
+    produto_id: UUID,
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Operador decide não recontar mais — aceita a última contagem como
+    divergência final, sem consumir mais uma tentativa."""
+    item = await service.manter_divergencia(
+        db, tenant_id=user.tenant_id, inventario_id=inventario_id, produto_id=produto_id
+    )
+    return {
+        "produto_id": item.produto_id,
+        "status_item": item.status_item,
+        "tentativas": item.tentativas,
+        "limite_atingido": True,
+    }
+
+
+@router.patch("/{inventario_id}/itens/{produto_id}/justificativa", response_model=dict)
+async def justificar_item_inventario(
+    inventario_id: UUID,
+    produto_id: UUID,
+    payload: JustificativaIn,
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Só pode ser chamado depois do item já estar finalizado como
+    divergente — nunca durante a digitação da contagem."""
+    item = await service.registrar_justificativa(
+        db, tenant_id=user.tenant_id, inventario_id=inventario_id, produto_id=produto_id, dados=payload
+    )
+    return {"produto_id": item.produto_id, "motivo": item.motivo, "anexo_url": item.anexo_url}
 
 
 @router.post("/{inventario_id}/itens/{produto_id}/anexo", response_model=dict)
@@ -120,9 +156,6 @@ async def enviar_anexo_item_inventario(
     arquivo: UploadFile,
     user: CurrentUser = Depends(require_perfil("admin", "operador")),
 ):
-    """Foto do item/prateleira anexada à justificativa de divergência (avaria,
-    vencimento etc). Só faz upload e devolve a URL — salvar no item é um PATCH
-    separado em .../itens/{produto_id}, junto com o motivo."""
     url = await enviar_anexo_inventario(
         tenant_id=user.tenant_id, inventario_id=inventario_id, produto_id=produto_id, arquivo=arquivo
     )
@@ -135,8 +168,6 @@ async def enviar_inventario_para_analise(
     user: CurrentUser = Depends(require_perfil("admin", "operador")),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Etapa A: operador conclui a contagem. O ciclo vai para 'em_analise' —
-    nenhuma movimentação de estoque é gravada ainda."""
     return await service.enviar_para_analise(db, tenant_id=user.tenant_id, usuario_id=user.id, inventario_id=inventario_id)
 
 
@@ -148,9 +179,6 @@ async def obter_conciliacao_inventario(
     user: CurrentUser = Depends(require_perfil(*PERFIS_SUPERVISOR)),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Painel de Conciliação: qtd anterior x contada x diferença x impacto
-    financeiro. Restrito a admin (perfil supervisor, quando existir, já
-    será aceito automaticamente aqui)."""
     return await service.obter_conciliacao(db, tenant_id=user.tenant_id, inventario_id=inventario_id)
 
 
@@ -163,11 +191,7 @@ async def decidir_item_inventario(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     item = await service.decidir_item(
-        db,
-        tenant_id=user.tenant_id,
-        usuario_id=user.id,
-        inventario_id=inventario_id,
-        produto_id=produto_id,
+        db, tenant_id=user.tenant_id, usuario_id=user.id, inventario_id=inventario_id, produto_id=produto_id,
         acao=payload.acao,
     )
     return {"produto_id": item.produto_id, "status_item": item.status_item}
@@ -179,7 +203,17 @@ async def aprovar_ajuste_final_inventario(
     user: CurrentUser = Depends(require_perfil(*PERFIS_SUPERVISOR)),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Etapa B final: grava as movimentações de ajuste reais (tipo='ajuste')
-    e fecha o ciclo. Exige que todo item já tenha sido decidido (aprovado ou
-    sem divergência) — nenhum pendente/divergente/recontagem em aberto."""
     return await service.aprovar_final(db, tenant_id=user.tenant_id, usuario_id=user.id, inventario_id=inventario_id)
+
+
+# --- Detalhes do ciclo (histórico, qualquer status) -------------------------
+
+@router.get("/{inventario_id}/detalhe", response_model=DetalheCicloOut)
+async def obter_detalhe_ciclo(
+    inventario_id: UUID,
+    user: CurrentUser = Depends(require_perfil(*PERFIS_SUPERVISOR)),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Tela de Detalhes do Ciclo: consultável a qualquer momento (inclusive
+    depois de fechado), com o log completo de tentativas por item."""
+    return await service.obter_detalhe_ciclo(db, tenant_id=user.tenant_id, inventario_id=inventario_id)

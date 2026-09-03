@@ -3089,3 +3089,33 @@ Esta entrada cobre só o **backend** das 3 pendências identificadas (Empresa, n
 **Entregável (Parte 2):** `backend/app/core/{storage,config}.py`, `backend/app/modules/inventario/router.py` (atualizado com endpoint de anexo), `backend/app/modules/inventario/service.py` (ajuste em `obter_aberto`), `backend/tests/test_inventario_conciliacao.py` (testes novos), `frontend/lib/types.ts`, `frontend/lib/api-inventario.ts` (novo), `frontend/components/inventario/{PainelOperadorInventario,PainelConciliacaoInventario}.tsx` (novos), `frontend/app/(dashboard)/inventario/page.tsx` (reescrito) + zip completo do projeto.
 
 **Etapa 39 completa** — backend e frontend prontos, testados e alinhados com o mockup aprovado no início da etapa.
+
+---
+
+## Etapa 39.1 — Recontagem com limite de 3 tentativas + Detalhes do Ciclo
+
+**Motivo:** revisão de produto identificou um furo na contagem cega da Etapa 39 — mostrar a divergência com sinal/magnitude pro operador (ex: "Perda -3") deixava ele calcular o saldo do sistema na hora (contagem ± diferença = saldo), mesmo o backend nunca enviando `qtd_sistema` cru. Desenhado com o usuário em dois mockups aprovados antes do código: fluxo de confirmação/recontagem, e a tela de Detalhes do Ciclo.
+
+**Máquina de estados do item, revisada:**
+`pendente → aguardando_confirmacao → contado | divergente → aprovado | recontagem_solicitada`
+
+- `aguardando_confirmacao`: contagem divergiu, aguardando o operador escolher recontar ou manter — novo estado intermediário que não existia antes.
+- `divergente`: agora só é alcançado por decisão explícita (manter) ou automaticamente ao esgotar as 3 tentativas — nunca na primeira divergência.
+- `recontagem_solicitada` (pedido do supervisor) volta o item pra uma rodada nova de até 3 tentativas — `tentativas` é resetado a zero.
+
+**O que mudou:**
+- **Migração 017**: coluna `tentativas` em `inventario_itens`; tabela nova `inventario_item_tentativas` (log de cada tentativa — número, quantidade, quem, quando — independente do resultado final), com RLS via join (mesmo padrão de `inventario_itens`, mesmo gap conhecido de não ter `tenant_id` direto). `status_item` ganhou o valor `aguardando_confirmacao`.
+- **Contagem virou "por tentativa", não autosave**: `PATCH /{id}/itens/{produto}/contagem` — cada chamada é uma tentativa logada. O frontend só chama isso quando o operador aperta "Confirmar" na linha; os botões +/- do stepper só ajustam o valor local, sem tocar a API.
+- **`POST /{id}/itens/{produto}/manter-divergencia`** — operador aceita a contagem atual como divergência final sem consumir mais uma tentativa (ele não recontou, só decidiu parar).
+- **Justificativa desacoplada da contagem**: `PATCH /{id}/itens/{produto}/justificativa` só aceita depois que o item já está `divergente` — nunca durante a digitação. No frontend, o modal de motivo/foto só abre depois que a divergência é finalizada (por "manter" ou pelo limite de 3), nunca a cada tentativa.
+- **`GET /{id}/operador` não retorna mais `divergencia`** — só `status_item` e `tentativas`. Testado explicitamente checando a ausência da chave `"divergencia":` no corpo bruto da resposta (não um `in` simples, porque `sem_divergencia`/`com_divergencia` do resumo geram falso positivo).
+- **`GET /{id}/detalhe`** (novo) — mesma base da conciliação, mas funciona pra qualquer status do ciclo (inclusive `fechado`) e inclui o log completo de tentativas por item. Restrito a `PERFIS_SUPERVISOR`, igual à conciliação. Alimenta a tela de Detalhes do Ciclo.
+- **Frontend:** `PainelOperadorInventario.tsx` reescrito (stepper local + botão Confirmar por linha, modal de "recontar ou manter" reaproveitando `ConfirmDialog`, justificativa pós-divergência, badge "Divergente" genérico sem sinal/valor); `DetalheCicloModal.tsx` novo (aberto ao clicar num card/linha do histórico — só pra supervisor —, trilha de auditoria, KPIs, lista de itens com tentativas expansíveis).
+
+**Testes:**
+- Suíte completa: **267/267** passando (banco de teste recriado do zero com a migração 017)
+- `test_inventario_conciliacao.py` reescrito: 21 testes cobrindo contagem batendo direto, 3ª tentativa finalizando sozinha, `manter-divergencia` sem consumir tentativa, justificativa bloqueada antes da finalização, recontagem do supervisor resetando tentativas, `/detalhe` expondo o log completo, isolamento de tenant e perfil
+- `tsc --noEmit` e `next build` limpos
+- Bandit: 0 problemas em todos os arquivos tocados
+
+**Entregável:** `backend/migrations/017_inventario_tentativas.sql` (novo), `backend/app/db/models.py`, `backend/app/modules/inventario/{schemas,service,router}.py` (reescritos), `backend/tests/test_inventario_conciliacao.py` (reescrito), `frontend/lib/types.ts`, `frontend/lib/api-inventario.ts`, `frontend/components/inventario/PainelOperadorInventario.tsx` (reescrito), `frontend/components/inventario/DetalheCicloModal.tsx` (novo), `frontend/app/(dashboard)/inventario/page.tsx` (atualizado) + zip completo do projeto.

@@ -1,18 +1,27 @@
 """
 Etapa 39 — Fluxo de encerramento e aprovação do Inventário.
+Etapa 39.1 — Recontagem com limite de 3 tentativas + log de auditoria.
 
 Antes desta etapa, `fechar()` recebia um payload em lote e ajustava o
 estoque na hora. Isso foi substituído por um fluxo de duas etapas:
 
-  1) Operador conta item a item (contagem cega — nunca vê qtd_sistema) e
-     "envia para análise". Nada toca o estoque real ainda.
+  1) Operador conta item a item (contagem cega — nunca vê qtd_sistema nem
+     divergencia) e "envia para análise". Nada toca o estoque real ainda.
   2) Supervisor/admin concilia (vê qtd_sistema vs qtd_contada + impacto
      financeiro), decide item a item, e só ao "aprovar e ajustar estoque
      real" é que as movimentações são gravadas.
 
-Continua reaproveitando `estoque.service.registrar()` para as movimentações
-de ajuste (tipo="ajuste") em vez de duplicar a lógica de saldo aqui — mesmo
-princípio arquitetural de sempre.
+A Etapa 39.1 fechou um furo da contagem cega: mostrar a divergência com
+sinal/magnitude pro operador (ex: "Perda -3") deixava ele calcular o saldo
+do sistema na hora (contagem ± diferença = saldo). Agora:
+  - cada tentativa de contagem é logada (InventarioItemTentativa), até 3;
+  - o operador nunca recebe o valor da divergência, só um alerta genérico
+    de "diverge" com a opção de recontar ou manter;
+  - a justificativa (motivo/foto) só é pedida depois que o item já foi
+    finalizado como divergente, nunca durante a digitação.
+
+Continua reaproveitando `estoque_service.registrar()` (tipo="ajuste") para
+o ajuste real em vez de duplicar a lógica de saldo aqui.
 """
 from datetime import datetime
 from uuid import UUID
@@ -21,10 +30,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Categoria, Deposito, Inventario, InventarioItem, Produto, User
+from app.db.models import Categoria, Deposito, Inventario, InventarioItem, InventarioItemTentativa, Produto, User
 from app.modules.estoque import service as estoque_service
 from app.modules.estoque.schemas import MovimentacaoCreate
-from app.modules.inventario.schemas import InventarioItemContagemIn
+from app.modules.inventario.schemas import LIMITE_TENTATIVAS, InventarioItemContagemIn, JustificativaIn
 
 ORDENAVEIS_PAINEL = {
     "ciclo": Inventario.ciclo,
@@ -32,12 +41,11 @@ ORDENAVEIS_PAINEL = {
     "criado_em": Inventario.criado_em,
 }
 
-# Estados de item que significam "decisão já tomada, não bloqueia aprovação final"
 STATUS_ITEM_RESOLVIDOS = ("contado", "aprovado")
+STATUS_ITEM_CONTAVEIS = ("contado", "divergente", "aprovado", "recontagem_solicitada")
 
 
 async def abrir(db: AsyncSession, *, tenant_id: UUID, deposito_id: UUID | None, ciclo: str) -> Inventario:
-    # Regra: só um inventário "aberto" por depósito por vez, evita duas contagens conflitantes
     stmt = select(Inventario).where(
         Inventario.tenant_id == tenant_id, Inventario.deposito_id == deposito_id, Inventario.status == "aberto"
     )
@@ -53,11 +61,6 @@ async def abrir(db: AsyncSession, *, tenant_id: UUID, deposito_id: UUID | None, 
     await db.commit()
     await db.refresh(inventario)
 
-    # Pré-popula um InventarioItem "pendente" por produto ativo do tenant,
-    # com qtd_sistema e custo_unitario já congelados no momento da abertura
-    # (situação "anterior" para a conciliação). Isso é o que permite a tela
-    # do operador mostrar "45/100 itens" e os filtros Pendente/Contados
-    # como consulta direta, em vez de derivar isso do catálogo no frontend.
     produtos = (
         await db.execute(select(Produto).where(Produto.tenant_id == tenant_id, Produto.ativo.is_(True)))
     ).scalars().all()
@@ -100,17 +103,13 @@ async def _obter_item_ou_404(db: AsyncSession, *, inventario_id: UUID, produto_i
     return item
 
 
-# --- Etapa A: contagem do operador ------------------------------------------
-
 async def registrar_contagem_item(
-    db: AsyncSession, *, tenant_id: UUID, inventario_id: UUID, produto_id: UUID, dados: InventarioItemContagemIn
+    db: AsyncSession, *, tenant_id: UUID, usuario_id: UUID, inventario_id: UUID, produto_id: UUID,
+    dados: InventarioItemContagemIn,
 ) -> InventarioItem:
     inventario = await _obter_inventario_ou_404(db, tenant_id=tenant_id, inventario_id=inventario_id)
     item = await _obter_item_ou_404(db, inventario_id=inventario_id, produto_id=produto_id)
 
-    # Contagem só é permitida com o ciclo aberto, OU quando o supervisor
-    # pediu recontagem daquele item específico (o ciclo pode estar
-    # em_analise enquanto só aquele item volta pro operador).
     pode_contar = inventario.status == "aberto" or (
         inventario.status == "em_analise" and item.status_item == "recontagem_solicitada"
     )
@@ -119,17 +118,66 @@ async def registrar_contagem_item(
             status_code=status.HTTP_409_CONFLICT,
             detail="Este item não está disponível para contagem no momento.",
         )
+    if item.status_item not in ("pendente", "aguardando_confirmacao", "recontagem_solicitada"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este item já foi finalizado — recontagem só é possível se a supervisão solicitar.",
+        )
+
+    item.tentativas += 1
+    db.add(
+        InventarioItemTentativa(
+            inventario_item_id=item.id,
+            numero_tentativa=item.tentativas,
+            qtd_contada=dados.qtd_contada,
+            usuario_id=usuario_id,
+        )
+    )
 
     divergencia = dados.qtd_contada - float(item.qtd_sistema)
     item.qtd_contada = dados.qtd_contada
     item.divergencia = divergencia
+
+    if divergencia == 0:
+        item.status_item = "contado"
+    elif item.tentativas >= LIMITE_TENTATIVAS:
+        item.status_item = "divergente"
+    else:
+        item.status_item = "aguardando_confirmacao"
+
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+async def manter_divergencia(
+    db: AsyncSession, *, tenant_id: UUID, inventario_id: UUID, produto_id: UUID
+) -> InventarioItem:
+    await _obter_inventario_ou_404(db, tenant_id=tenant_id, inventario_id=inventario_id)
+    item = await _obter_item_ou_404(db, inventario_id=inventario_id, produto_id=produto_id)
+    if item.status_item != "aguardando_confirmacao":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esse item não está aguardando confirmação de divergência.",
+        )
+    item.status_item = "divergente"
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+async def registrar_justificativa(
+    db: AsyncSession, *, tenant_id: UUID, inventario_id: UUID, produto_id: UUID, dados: JustificativaIn
+) -> InventarioItem:
+    await _obter_inventario_ou_404(db, tenant_id=tenant_id, inventario_id=inventario_id)
+    item = await _obter_item_ou_404(db, inventario_id=inventario_id, produto_id=produto_id)
+    if item.status_item != "divergente":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Só é possível justificar um item já finalizado como divergente.",
+        )
     item.motivo = dados.motivo
     item.anexo_url = dados.anexo_url
-    item.status_item = "divergente" if divergencia != 0 else "contado"
-    # Recontagem resolvida: limpa a decisão anterior do supervisor sobre esse item
-    item.decidido_por = None
-    item.decidido_em = None
-
     await db.commit()
     await db.refresh(item)
     return item
@@ -154,8 +202,8 @@ async def painel_operador(db: AsyncSession, *, tenant_id: UUID, inventario_id: U
             "codigo_barras": codigo_barras,
             "categoria_nome": categoria_nome,
             "qtd_contada": item.qtd_contada,
-            "divergencia": item.divergencia,
             "status_item": item.status_item,
+            "tentativas": item.tentativas,
             "motivo": item.motivo,
             "anexo_url": item.anexo_url,
         }
@@ -163,10 +211,10 @@ async def painel_operador(db: AsyncSession, *, tenant_id: UUID, inventario_id: U
     ]
 
     total = len(itens)
-    contados = sum(1 for i in itens if i["status_item"] != "pendente")
+    contados = sum(1 for i in itens if i["status_item"] not in ("pendente", "aguardando_confirmacao"))
     sem_divergencia = sum(1 for i in itens if i["status_item"] in ("contado", "aprovado"))
     com_divergencia = sum(1 for i in itens if i["status_item"] in ("divergente", "recontagem_solicitada"))
-    pendentes = total - contados
+    pendentes = total - contados - sum(1 for i in itens if i["status_item"] == "aguardando_confirmacao")
 
     return {
         "inventario": inventario,
@@ -196,11 +244,11 @@ async def enviar_para_analise(db: AsyncSession, *, tenant_id: UUID, usuario_id: 
         await db.execute(
             select(
                 func.count(InventarioItem.id),
-                func.count(InventarioItem.id).filter(InventarioItem.status_item == "pendente"),
+                func.count(InventarioItem.id).filter(InventarioItem.status_item.in_(STATUS_ITEM_CONTAVEIS)),
             ).where(InventarioItem.inventario_id == inventario_id)
         )
     ).one()
-    total, pendentes = contagem
+    total, contados = contagem
 
     inventario.status = "em_analise"
     inventario.enviado_por = usuario_id
@@ -208,10 +256,8 @@ async def enviar_para_analise(db: AsyncSession, *, tenant_id: UUID, usuario_id: 
     await db.commit()
     await db.refresh(inventario)
 
-    return {"inventario": inventario, "itens_contados": total - pendentes, "itens_pendentes": pendentes}
+    return {"inventario": inventario, "itens_contados": contados, "itens_pendentes": total - contados}
 
-
-# --- Etapa B: conciliação do supervisor -------------------------------------
 
 async def obter_conciliacao(db: AsyncSession, *, tenant_id: UUID, inventario_id: UUID) -> dict:
     inventario = await _obter_inventario_ou_404(db, tenant_id=tenant_id, inventario_id=inventario_id)
@@ -253,6 +299,7 @@ async def obter_conciliacao(db: AsyncSession, *, tenant_id: UUID, inventario_id:
                 "divergencia": item.divergencia,
                 "impacto_financeiro": impacto,
                 "status_item": item.status_item,
+                "tentativas": item.tentativas,
                 "motivo": item.motivo,
                 "anexo_url": item.anexo_url,
                 "decidido_por_nome": decidido_por_nome,
@@ -288,7 +335,11 @@ async def decidir_item(
             detail="Só itens divergentes podem ser aprovados ou mandados para recontagem.",
         )
 
-    item.status_item = "aprovado" if acao == "aprovar" else "recontagem_solicitada"
+    if acao == "aprovar":
+        item.status_item = "aprovado"
+    else:
+        item.status_item = "recontagem_solicitada"
+        item.tentativas = 0
     item.decidido_por = usuario_id
     item.decidido_em = datetime.utcnow()
     await db.commit()
@@ -315,8 +366,8 @@ async def aprovar_final(db: AsyncSession, *, tenant_id: UUID, usuario_id: UUID, 
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"Ainda há {len(pendentes)} item(ns) sem decisão (pendente, divergente ou "
-                "aguardando recontagem). Decida todos antes de aprovar o ajuste final."
+                f"Ainda há {len(pendentes)} item(ns) sem decisão (pendente, aguardando confirmação, "
+                "divergente ou aguardando recontagem). Decida todos antes de aprovar o ajuste final."
             ),
         )
 
@@ -353,12 +404,51 @@ async def aprovar_final(db: AsyncSession, *, tenant_id: UUID, usuario_id: UUID, 
     }
 
 
-# --- Listagens gerais (mantidas da Etapa 20) --------------------------------
+async def obter_detalhe_ciclo(db: AsyncSession, *, tenant_id: UUID, inventario_id: UUID) -> dict:
+    base = await obter_conciliacao(db, tenant_id=tenant_id, inventario_id=inventario_id)
+
+    aprovado_por_nome = None
+    if base["inventario"].aprovado_por:
+        usuario = await db.get(User, base["inventario"].aprovado_por)
+        aprovado_por_nome = usuario.nome if usuario else None
+
+    tentativas_stmt = (
+        select(InventarioItemTentativa, User.nome, InventarioItem.produto_id)
+        .join(InventarioItem, InventarioItem.id == InventarioItemTentativa.inventario_item_id)
+        .outerjoin(User, User.id == InventarioItemTentativa.usuario_id)
+        .where(InventarioItem.inventario_id == inventario_id)
+        .order_by(InventarioItemTentativa.numero_tentativa)
+    )
+    linhas_tentativas = (await db.execute(tentativas_stmt)).all()
+
+    tentativas_por_produto: dict[UUID, list[dict]] = {}
+    for tentativa, usuario_nome, produto_id in linhas_tentativas:
+        tentativas_por_produto.setdefault(produto_id, []).append(
+            {
+                "numero_tentativa": tentativa.numero_tentativa,
+                "qtd_contada": tentativa.qtd_contada,
+                "usuario_nome": usuario_nome,
+                "criado_em": tentativa.criado_em,
+            }
+        )
+
+    itens_com_log = [
+        {**item, "tentativas_log": tentativas_por_produto.get(item["produto_id"], [])} for item in base["itens"]
+    ]
+
+    return {
+        "inventario": base["inventario"],
+        "enviado_por_nome": base["enviado_por_nome"],
+        "aprovado_por_nome": aprovado_por_nome,
+        "kpis": base["kpis"],
+        "itens": itens_com_log,
+    }
+
 
 async def listar(
     db: AsyncSession, *, tenant_id: UUID, status_filtro: str | None = None, pagina: int = 1, tamanho: int = 25
 ) -> list[Inventario]:
-    stmt = select(Inventario).where(Inventario.tenant_id == tenant_id)  # defesa em profundidade além do RLS
+    stmt = select(Inventario).where(Inventario.tenant_id == tenant_id)
     if status_filtro:
         stmt = stmt.where(Inventario.status == status_filtro)
     stmt = stmt.order_by(Inventario.criado_em.desc()).offset((pagina - 1) * tamanho).limit(tamanho)
@@ -366,11 +456,6 @@ async def listar(
 
 
 async def obter_aberto(db: AsyncSession, *, tenant_id: UUID, deposito_id: UUID | None) -> Inventario | None:
-    """Usado pelo frontend ao carregar a tela de Inventário, para retomar um
-    ciclo em andamento em vez de perdê-lo caso a página seja recarregada.
-    Inclui 'em_analise' (Etapa 39) — do ponto de vista do frontend é o
-    mesmo ciclo em andamento, só numa etapa diferente (aguardando
-    conciliação em vez de em contagem)."""
     stmt = select(Inventario).where(
         Inventario.tenant_id == tenant_id,
         Inventario.deposito_id == deposito_id,
@@ -391,15 +476,9 @@ async def painel(
     pagina: int = 1,
     tamanho: int = 25,
 ) -> dict:
-    """
-    Alimenta o histórico de ciclos de inventário (não confundir com o
-    painel do operador/supervisor dentro de um ciclo específico). Mantido
-    separado de listar()/GET /inventario — mesmo padrão já usado em
-    /estoque/painel, /compras/painel, /notas-fiscais/painel etc.
-    """
     qtd_itens_subq = (
         select(func.count(InventarioItem.id))
-        .where(InventarioItem.inventario_id == Inventario.id, InventarioItem.status_item != "pendente")
+        .where(InventarioItem.inventario_id == Inventario.id, InventarioItem.status_item.in_(STATUS_ITEM_CONTAVEIS))
         .correlate(Inventario)
         .scalar_subquery()
     )
@@ -447,8 +526,6 @@ async def painel(
         for inv, deposito_nome, qtd_itens, qtd_divergentes in linhas
     ]
 
-    # KPIs sempre sobre o total do tenant, sem aplicar busca/status_filtro —
-    # mesmo princípio já usado nos demais paineis com kit de UX.
     total_inventarios = (
         await db.execute(select(func.count()).select_from(Inventario).where(Inventario.tenant_id == tenant_id))
     ).scalar_one()

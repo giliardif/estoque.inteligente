@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 MOTIVOS_DIVERGENCIA = ("avaria", "vencimento", "furto", "erro_entrada")
+LIMITE_TENTATIVAS = 3
 
 
 class InventarioAbrir(BaseModel):
@@ -26,16 +27,27 @@ class InventarioOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# --- Etapa A: contagem do operador (tela de contagem, contagem cega) -------
+# --- Etapa A: contagem do operador (contagem cega de verdade) --------------
 #
-# O operador NUNCA recebe qtd_sistema — só o que ele mesmo digitou e um
-# indicador de divergência (badge), que a etapa aprovou manter com o
-# sinal/magnitude visível (ex: "Sobra +2"), mesmo sem expor o saldo bruto
-# do sistema.
+# O operador NUNCA recebe qtd_sistema nem divergencia — só o status_item e
+# quantas tentativas já usou. Cada envio de contagem é uma "tentativa"
+# registrada (log em InventarioItemTentativa), até o limite de 3. O +/- do
+# stepper só ajusta o valor local no frontend; a chamada à API só acontece
+# quando o operador aperta "Confirmar".
 
 class InventarioItemContagemIn(BaseModel):
     qtd_contada: float = Field(ge=0)
-    motivo: Literal["avaria", "vencimento", "furto", "erro_entrada"] | None = None
+
+
+class ResultadoContagemOut(BaseModel):
+    produto_id: UUID
+    status_item: str
+    tentativas: int
+    limite_atingido: bool
+
+
+class JustificativaIn(BaseModel):
+    motivo: Literal["avaria", "vencimento", "furto", "erro_entrada"]
     anexo_url: str | None = Field(default=None, max_length=500)
 
 
@@ -45,8 +57,8 @@ class InventarioItemOperadorOut(BaseModel):
     codigo_barras: str | None
     categoria_nome: str | None
     qtd_contada: float | None
-    divergencia: float | None  # nunca expõe qtd_sistema, só o resultado da comparação
-    status_item: str  # pendente | contado | divergente | aprovado | recontagem_solicitada
+    status_item: str  # pendente | aguardando_confirmacao | contado | divergente | aprovado | recontagem_solicitada
+    tentativas: int
     motivo: str | None
     anexo_url: str | None
 
@@ -91,6 +103,7 @@ class InventarioItemConciliacaoOut(BaseModel):
     divergencia: float | None
     impacto_financeiro: float | None  # divergencia * custo_unitario, calculado em runtime
     status_item: str
+    tentativas: int
     motivo: str | None
     anexo_url: str | None
     decidido_por_nome: str | None
@@ -114,6 +127,32 @@ class AprovacaoFinalOut(BaseModel):
     inventario: InventarioOut
     itens_ajustados: int
     impacto_financeiro_total: float
+
+
+# --- Detalhes do ciclo (histórico, qualquer status) -------------------------
+#
+# Mesma informação da conciliação, mas consultável mesmo depois do ciclo
+# fechado — e com o log completo de tentativas por item, não só o
+# resultado final. Restrito a PERFIS_SUPERVISOR, igual à conciliação,
+# porque também expõe qtd_sistema/divergência real.
+
+class TentativaOut(BaseModel):
+    numero_tentativa: int
+    qtd_contada: float
+    usuario_nome: str | None
+    criado_em: datetime
+
+
+class InventarioItemDetalheOut(InventarioItemConciliacaoOut):
+    tentativas_log: list[TentativaOut]
+
+
+class DetalheCicloOut(BaseModel):
+    inventario: InventarioOut
+    enviado_por_nome: str | None
+    aprovado_por_nome: str | None
+    kpis: KpisConciliacaoOut
+    itens: list[InventarioItemDetalheOut]
 
 
 # --- Painel de listagem de ciclos (Etapa 20, mantido) -----------------------
