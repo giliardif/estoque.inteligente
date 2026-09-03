@@ -3156,3 +3156,22 @@ Esta entrada cobre só o **backend** das 3 pendências identificadas (Empresa, n
 **Testes:** 1 novo (`test_notificacoes_conta_itens_com_recontagem_solicitada`) — suíte completa **271/271**. `tsc`/`next build` limpos. Bandit 0 issues.
 
 **Entregável:** `backend/app/modules/inventario/{schemas,service,router}.py`, `backend/tests/test_inventario_conciliacao.py`, `frontend/lib/api-inventario.ts`, `frontend/lib/useNotificacoesInventario.ts` (novo), `frontend/app/(dashboard)/layout.tsx`, `frontend/components/inventario/PainelOperadorInventario.tsx` + zip completo do projeto.
+
+---
+
+## Correção — item nunca contado travava o ciclo + supervisor sem acesso à contagem
+
+**Como foi encontrado:** usuário reportou "cadê pra recontar?" ao ver o badge de notificação funcionando mas não achar como acessar a contagem estando logado como admin. Investigação revelou dois bugs distintos no mesmo ciclo real de staging (2026-09, Doce Encanto).
+
+**Bug 1 (grave) — item `pendente` travava o ciclo pra sempre:** quando o operador clicava "Concluir Contagem" com item(ns) nunca digitado(s), eles ficavam com `status_item = 'pendente'` e **não existia nenhum caminho de saída** — o operador não podia mais contá-los (regra só libera contagem com ciclo `aberto` ou item `recontagem_solicitada`) e o supervisor não podia decidir sobre eles (`decidir_item` só aceitava `divergente`/`recontagem_solicitada`). `aprovar-final` nunca destravava. Reproduzido exatamente no ciclo relatado (Amendoim Mendoft e Batata Pringles, ambos "Não contado").
+
+- Correção: `decidir_item` agora aceita `acao="recontagem"` também a partir de `pendente` (aprovar continua restrito a `divergente`, não faz sentido aprovar algo sem divergência calculada). Botão **"Solicitar Contagem"** novo na coluna de ação da conciliação pra itens não contados.
+- `itens_aguardando_decisao` no KPI da conciliação passou a contar `pendente` também, refletindo a realidade.
+
+**Bug 2 (o reportado) — supervisor sem acesso à tela de contagem:** com o ciclo `em_analise`, a página sempre mostrava o Painel de Conciliação pra quem tem perfil supervisor — sem nenhuma forma de alternar pra tela de contagem. Numa operação onde a mesma pessoa concilia e também conta fisicamente (como no teste do usuário), ficava impossível recontar.
+
+- Correção: toggle **"Painel de Conciliação" / "Ir para Contagem"** na tela, visível só pra supervisor com ciclo `em_analise`. Reseta pra Conciliação sempre que um ciclo é concluído/cancelado.
+
+**Verificação:** como não tenho acesso de rede a `eligente-staging.vercel.app`/Railway a partir do sandbox (domínios não liberados), a validação foi feita por dois caminhos equivalentes: (1) suíte completa contra Postgres real — **273/273**, incluindo 2 testes novos que reproduzem o cenário exato do bug (`test_item_nunca_contado_pode_ser_mandado_para_recontagem`, `test_item_pendente_nao_pode_ser_aprovado_direto`); (2) os 2 itens travados do ciclo real em staging foram inspecionados e corrigidos diretamente via SQL (mesmo efeito que o botão "Solicitar Contagem" produziria), confirmando a correção nos dados reais que geraram o report. `tsc`/`next build` limpos. Bandit 0 issues.
+
+**Entregável:** `backend/app/modules/inventario/{service,router}.py`, `backend/tests/test_inventario_conciliacao.py`, `frontend/components/inventario/PainelConciliacaoInventario.tsx`, `frontend/app/(dashboard)/inventario/page.tsx` + zip completo do projeto.

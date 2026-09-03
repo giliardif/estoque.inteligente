@@ -166,7 +166,15 @@ export function PainelConciliacaoInventario({
                   ) : item.status_item === "aprovado" ? (
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-sucesso)", background: "rgba(16,185,129,0.14)" }}>Ajuste aprovado</span>
                   ) : item.status_item === "pendente" ? (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "var(--cor-texto-muted)", background: "rgba(138,127,115,0.14)" }}>Não contado</span>
+                    <button
+                      onClick={() => decidir(item, "recontagem")}
+                      disabled={decidindoId === item.produto_id}
+                      className="rounded-md px-2.5 py-1.5 text-xs font-bold border disabled:opacity-60"
+                      style={{ color: "var(--cor-texto-muted)", borderColor: "var(--cor-borda)" }}
+                      title="Este item nunca foi contado — manda pro operador contar"
+                    >
+                      Solicitar Contagem
+                    </button>
                   ) : (
                     <span className="text-xs" style={{ color: "var(--cor-texto-muted)" }}>Sem divergência</span>
                   )}

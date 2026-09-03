@@ -287,7 +287,7 @@ async def obter_conciliacao(db: AsyncSession, *, tenant_id: UUID, inventario_id:
             impacto_total += impacto
         if item.divergencia and item.divergencia != 0:
             divergentes += 1
-        if item.status_item in ("divergente", "recontagem_solicitada"):
+        if item.status_item in ("divergente", "recontagem_solicitada", "pendente"):
             aguardando += 1
         itens.append(
             {
@@ -329,11 +329,22 @@ async def decidir_item(
             detail="Só é possível decidir itens de um inventário em análise.",
         )
     item = await _obter_item_ou_404(db, inventario_id=inventario_id, produto_id=produto_id)
-    if item.status_item not in ("divergente", "recontagem_solicitada"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Só itens divergentes podem ser aprovados ou mandados para recontagem.",
-        )
+    if acao == "aprovar":
+        if item.status_item != "divergente":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Só itens divergentes podem ter o ajuste aprovado.",
+            )
+    else:
+        # 'pendente' entra aqui de propósito: um item nunca contado pelo
+        # operador não tem outro jeito de ser resolvido — sem isso, ele
+        # trava o ciclo pra sempre (nem o operador consegue mais contá-lo
+        # fora do fluxo de recontagem, nem o supervisor tinha como agir).
+        if item.status_item not in ("divergente", "recontagem_solicitada", "pendente"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esse item não está disponível pra recontagem no momento.",
+            )
 
     if acao == "aprovar":
         item.status_item = "aprovado"

@@ -27,6 +27,10 @@ export default function InventarioPage() {
   const ehSupervisor = usuario ? PERFIS_SUPERVISOR.includes(usuario.perfil) : false;
 
   const [inventario, setInventario] = useState<InventarioCiclo | null>(null);
+  // Só relevante pra quem tem perfil supervisor com ciclo em_analise — dá
+  // pra alternar entre revisar (Conciliação) e fisicamente recontar
+  // (Contagem), útil quando a mesma pessoa faz as duas coisas.
+  const [visaoSupervisor, setVisaoSupervisor] = useState<"conciliacao" | "contagem">("conciliacao");
   const [ciclo, setCiclo] = useState(() => new Date().toISOString().slice(0, 7));
   const [erro, setErro] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
@@ -105,6 +109,7 @@ export default function InventarioPage() {
 
   function aoConcluirCiclo() {
     setInventario(null);
+    setVisaoSupervisor("conciliacao");
     carregarPainel();
   }
 
@@ -172,7 +177,33 @@ export default function InventarioPage() {
 
       {!verificandoAberto && inventario && (
         inventario.status === "em_analise" && ehSupervisor ? (
-          <PainelConciliacaoInventario inventarioId={inventario.id} onAprovado={aoConcluirCiclo} />
+          <>
+            <div className="flex gap-1.5 mb-3">
+              <button
+                onClick={() => setVisaoSupervisor("conciliacao")}
+                className="rounded-md px-3 py-1.5 text-xs font-semibold border"
+                style={visaoSupervisor === "conciliacao"
+                  ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
+                  : { background: "transparent", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+              >
+                Painel de Conciliação
+              </button>
+              <button
+                onClick={() => setVisaoSupervisor("contagem")}
+                className="rounded-md px-3 py-1.5 text-xs font-semibold border"
+                style={visaoSupervisor === "contagem"
+                  ? { background: "rgba(16,185,129,0.14)", borderColor: "var(--cor-acento)", color: "var(--cor-acento)" }
+                  : { background: "transparent", borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+              >
+                Ir para Contagem
+              </button>
+            </div>
+            {visaoSupervisor === "conciliacao" ? (
+              <PainelConciliacaoInventario inventarioId={inventario.id} onAprovado={aoConcluirCiclo} />
+            ) : (
+              <PainelOperadorInventario inventarioId={inventario.id} onEnviadoParaAnalise={verificarAberto} onCancelado={aoConcluirCiclo} />
+            )}
+          </>
         ) : (
           <PainelOperadorInventario inventarioId={inventario.id} onEnviadoParaAnalise={verificarAberto} onCancelado={aoConcluirCiclo} />
         )

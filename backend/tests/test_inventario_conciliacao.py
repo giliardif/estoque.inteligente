@@ -281,6 +281,49 @@ async def test_detalhe_ciclo_expoe_log_completo_de_tentativas(client_tenant_a: A
 
 
 @pytest.mark.asyncio
+async def test_item_nunca_contado_pode_ser_mandado_para_recontagem(
+    client_tenant_a: AsyncClient, produto_com_saldo_10: str
+):
+    """Bug real: item 'pendente' (nunca contado pelo operador) ficava
+    travado pra sempre depois do enviar-analise — nem o operador conseguia
+    contá-lo, nem o supervisor tinha como agir. Reproduz o cenário exato
+    do ciclo 2026-09 relatado (2 itens 'Não contado' bloqueando o
+    aprovar-final indefinidamente)."""
+    inv_id = await _abrir(client_tenant_a)
+    # Não conta o item — simula "Concluir Contagem" com item pendente
+    await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")
+
+    aguardando_antes = await client_tenant_a.get(f"/api/v1/inventario/{inv_id}/conciliacao")
+    assert aguardando_antes.json()["kpis"]["itens_aguardando_decisao"] == 1
+
+    aprovar_bloqueado = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/aprovar-final")
+    assert aprovar_bloqueado.status_code == 409, aprovar_bloqueado.text
+
+    recontagem = await client_tenant_a.patch(
+        f"/api/v1/inventario/{inv_id}/itens/{produto_com_saldo_10}/decisao", json={"acao": "recontagem"}
+    )
+    assert recontagem.status_code == 200, recontagem.text
+    assert recontagem.json()["status_item"] == "recontagem_solicitada"
+
+    nova_contagem = await _contar(client_tenant_a, inv_id, produto_com_saldo_10, 10)
+    assert nova_contagem["status_item"] == "contado"
+
+    aprovar = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/aprovar-final")
+    assert aprovar.status_code == 200, aprovar.text
+
+
+@pytest.mark.asyncio
+async def test_item_pendente_nao_pode_ser_aprovado_direto(client_tenant_a: AsyncClient, produto_com_saldo_10: str):
+    inv_id = await _abrir(client_tenant_a)
+    await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")
+
+    aprovar = await client_tenant_a.patch(
+        f"/api/v1/inventario/{inv_id}/itens/{produto_com_saldo_10}/decisao", json={"acao": "aprovar"}
+    )
+    assert aprovar.status_code == 409, aprovar.text  # não tem divergência calculada — não faz sentido 'aprovar'
+
+
+@pytest.mark.asyncio
 async def test_notificacoes_conta_itens_com_recontagem_solicitada(
     client_tenant_a: AsyncClient, produto_com_saldo_10: str
 ):
