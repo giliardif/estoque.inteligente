@@ -48,6 +48,12 @@ export function enviarParaAnalise(inventarioId: string) {
   );
 }
 
+// Descarta um ciclo aberto sem nenhuma contagem ainda — ex: aberto antes
+// de existir produto no tenant, ou aberto por engano.
+export function cancelarCiclo(inventarioId: string) {
+  return apiFetch<InventarioCiclo>(`/inventario/${inventarioId}/cancelar`, { method: "POST" });
+}
+
 export async function enviarAnexoItem(inventarioId: string, produtoId: string, arquivo: File): Promise<string> {
   // Upload multipart não passa pelo apiFetch — mesmo padrão já usado em
   // enviarMinhaFoto (lib/api-conta.ts) e na importação de imagem de produto.

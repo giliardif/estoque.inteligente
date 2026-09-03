@@ -278,7 +278,7 @@ export type PainelInventario = {
 
 export type InventarioCiclo = {
   id: string;
-  status: "aberto" | "em_analise" | "fechado";
+  status: "aberto" | "em_analise" | "fechado" | "cancelado";
   ciclo: string;
   deposito_id: string | null;
   criado_em: string;

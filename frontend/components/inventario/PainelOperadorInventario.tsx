@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import {
-  enviarAnexoItem, enviarParaAnalise, manterDivergencia, obterPainelOperador, registrarContagemItem,
+  cancelarCiclo, enviarAnexoItem, enviarParaAnalise, manterDivergencia, obterPainelOperador, registrarContagemItem,
   registrarJustificativa,
 } from "@/lib/api-inventario";
 import { ItemOperador, LIMITE_TENTATIVAS, MotivoDivergencia, PainelOperador as PainelOperadorTipo } from "@/lib/types";
@@ -27,9 +27,11 @@ const STATUS_EDITAVEIS = new Set(["pendente", "aguardando_confirmacao", "reconta
 export function PainelOperadorInventario({
   inventarioId,
   onEnviadoParaAnalise,
+  onCancelado,
 }: {
   inventarioId: string;
   onEnviadoParaAnalise: () => void;
+  onCancelado: () => void;
 }) {
   const { erro: toastErro, sucesso: toastSucesso } = useToast();
   const [painel, setPainel] = useState<PainelOperadorTipo | null>(null);
@@ -43,6 +45,8 @@ export function PainelOperadorInventario({
   const [itemJustificativa, setItemJustificativa] = useState<ItemOperador | null>(null);
   const [confirmandoEnvio, setConfirmandoEnvio] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
   const [scannerAberto, setScannerAberto] = useState(false);
   const [linhaDestacadaId, setLinhaDestacadaId] = useState<string | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -192,6 +196,21 @@ export function PainelOperadorInventario({
     }
   }
 
+  async function confirmarCancelamento() {
+    setCancelando(true);
+    try {
+      await cancelarCiclo(inventarioId);
+      toastSucesso("Ciclo cancelado.");
+      setConfirmandoCancelamento(false);
+      onCancelado();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Não foi possível cancelar o ciclo.";
+      toastErro(msg);
+    } finally {
+      setCancelando(false);
+    }
+  }
+
   if (carregando && !painel) {
     return <div className="rounded-xl border p-8 text-center text-sm" style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}>Carregando contagem...</div>;
   }
@@ -207,13 +226,24 @@ export function PainelOperadorInventario({
             Inventário — Ciclo {painel.inventario.ciclo} {emAnalise && <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-md" style={{ color: "#F59E0B", background: "rgba(245,158,11,0.16)" }}>Aguardando aprovação</span>}
           </h3>
           {!emAnalise && (
-            <button
-              onClick={() => setConfirmandoEnvio(true)}
-              className="rounded-md px-3.5 py-2 font-bold text-xs"
-              style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
-            >
-              Concluir Contagem
-            </button>
+            <div className="flex items-center gap-2">
+              {painel.progresso.contados === 0 && (
+                <button
+                  onClick={() => setConfirmandoCancelamento(true)}
+                  className="rounded-md px-3 py-2 font-semibold text-xs border"
+                  style={{ borderColor: "var(--cor-borda)", color: "var(--cor-texto-muted)" }}
+                >
+                  Cancelar ciclo
+                </button>
+              )}
+              <button
+                onClick={() => setConfirmandoEnvio(true)}
+                className="rounded-md px-3.5 py-2 font-bold text-xs"
+                style={{ background: "var(--cor-acento)", color: "var(--cor-base)" }}
+              >
+                Concluir Contagem
+              </button>
+            </div>
           )}
         </div>
         <div className="flex justify-between text-xs font-semibold mb-1.5">
@@ -321,6 +351,18 @@ export function PainelOperadorInventario({
         confirmando={processandoDecisao}
         onConfirmar={manterContagemAtual}
         onCancelar={recontar}
+      />
+
+      <ConfirmDialog
+        aberto={confirmandoCancelamento}
+        titulo="Cancelar este ciclo?"
+        descricao="O ciclo será descartado — como nenhum item foi contado ainda, nada será perdido. Essa ação não pode ser desfeita."
+        labelConfirmar="Cancelar ciclo"
+        labelCancelar="Voltar"
+        perigoso
+        confirmando={cancelando}
+        onConfirmar={confirmarCancelamento}
+        onCancelar={() => setConfirmandoCancelamento(false)}
       />
 
       <ConfirmDialog

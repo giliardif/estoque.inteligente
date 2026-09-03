@@ -3119,3 +3119,22 @@ Esta entrada cobre só o **backend** das 3 pendências identificadas (Empresa, n
 - Bandit: 0 problemas em todos os arquivos tocados
 
 **Entregável:** `backend/migrations/017_inventario_tentativas.sql` (novo), `backend/app/db/models.py`, `backend/app/modules/inventario/{schemas,service,router}.py` (reescritos), `backend/tests/test_inventario_conciliacao.py` (reescrito), `frontend/lib/types.ts`, `frontend/lib/api-inventario.ts`, `frontend/components/inventario/PainelOperadorInventario.tsx` (reescrito), `frontend/components/inventario/DetalheCicloModal.tsx` (novo), `frontend/app/(dashboard)/inventario/page.tsx` (atualizado) + zip completo do projeto.
+
+---
+
+## Correção — Cancelamento de ciclo sem contagem
+
+**Bug reportado:** ciclo de inventário do tenant Constrular (staging) mostrando "0/0 itens" e "Nenhum item encontrado" — usuário achou que a busca estava desabilitada. Investigação mostrou que não era bug de busca: o ciclo foi aberto 34 minutos antes de existir qualquer produto ativo nesse tenant, então `abrir()` pré-populou zero `InventarioItem`. Sem produtos na hora da abertura, não tinha o que pré-popular — e como não existia forma de sincronizar itens novos num ciclo já aberto nem de cancelar um ciclo vazio, ele ficou preso em `aberto` pra sempre (o backend bloqueia abrir um novo ciclo pro mesmo depósito enquanto houver um aberto).
+
+**Solução — cancelamento de ciclo (não sincronização):** em vez de tentar sincronizar produtos novos num ciclo em andamento (mudaria o "retrato" que a conciliação depende), decisão foi permitir descartar e abrir de novo.
+
+- **Migração 018**: novo status `cancelado` na constraint de `inventarios`.
+- **`POST /{id}/cancelar`**: só permitido com `status == 'aberto'` E nenhum item com `status_item != 'pendente'` — se já existe contagem real, bloqueia com 409 e orienta a usar o fluxo normal (`enviar-analise` → `aprovar-final`) em vez de cancelar, pra não perder trabalho por engano.
+- **Frontend**: botão "Cancelar ciclo" na tela do operador, ao lado de "Concluir Contagem" — só aparece quando `progresso.contados === 0` (mesma regra do backend, refletida na UI). `ConfirmDialog` de confirmação (`perigoso`). Badge cinza/vermelho "Cancelado" no histórico de ciclos, filtro novo na lista.
+- **Ciclo travado do Constrular**: cancelado diretamente em staging (satisfazia a regra — 0 itens contados), liberando o tenant para abrir um novo ciclo agora que os 30 produtos já existem.
+
+**Testes:** 3 novos (`cancelar_ciclo_vazio_com_sucesso`, `cancelar_bloqueado_se_ja_tem_item_contado`, `cancelar_bloqueado_se_ciclo_nao_esta_aberto`) — suíte completa **270/270**. `tsc`/`next build` limpos. Bandit 0 issues.
+
+**Pendência registrada, não tratada agora:** sincronizar produtos cadastrados depois da abertura de um ciclo (adicionar itens novos a um ciclo já em andamento) — combinado que fica pra depois, só resolvido o caso imediato via cancelamento.
+
+**Entregável:** `backend/migrations/018_inventario_cancelamento.sql` (novo), `backend/app/modules/inventario/{service,router}.py`, `backend/tests/test_inventario_conciliacao.py`, `frontend/lib/types.ts`, `frontend/lib/api-inventario.ts`, `frontend/components/inventario/PainelOperadorInventario.tsx`, `frontend/app/(dashboard)/inventario/page.tsx` + zip completo do projeto.

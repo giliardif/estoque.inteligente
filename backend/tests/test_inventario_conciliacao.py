@@ -281,6 +281,36 @@ async def test_detalhe_ciclo_expoe_log_completo_de_tentativas(client_tenant_a: A
 
 
 @pytest.mark.asyncio
+async def test_cancelar_ciclo_vazio_com_sucesso(client_tenant_a: AsyncClient):
+    inv_id = await _abrir(client_tenant_a)
+    resp = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/cancelar")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "cancelado"
+
+    # Ciclo cancelado libera abrir um novo pro mesmo depósito
+    novo = await client_tenant_a.post("/api/v1/inventario", json={"ciclo": "2026-09"})
+    assert novo.status_code == 201, novo.text
+
+
+@pytest.mark.asyncio
+async def test_cancelar_bloqueado_se_ja_tem_item_contado(client_tenant_a: AsyncClient, produto_com_saldo_10: str):
+    inv_id = await _abrir(client_tenant_a)
+    await _contar(client_tenant_a, inv_id, produto_com_saldo_10, 10)
+
+    resp = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/cancelar")
+    assert resp.status_code == 409, resp.text
+
+
+@pytest.mark.asyncio
+async def test_cancelar_bloqueado_se_ciclo_nao_esta_aberto(client_tenant_a: AsyncClient, produto_com_saldo_10: str):
+    inv_id = await _abrir_contar_e_bater(client_tenant_a, produto_com_saldo_10)
+    await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/enviar-analise")
+
+    resp = await client_tenant_a.post(f"/api/v1/inventario/{inv_id}/cancelar")
+    assert resp.status_code == 409, resp.text
+
+
+@pytest.mark.asyncio
 async def test_upload_anexo_extensao_invalida_e_rejeitado(client_tenant_a: AsyncClient, produto_com_saldo_10: str):
     inv_id = await _abrir(client_tenant_a)
     arquivo = io.BytesIO(b"conteudo qualquer")

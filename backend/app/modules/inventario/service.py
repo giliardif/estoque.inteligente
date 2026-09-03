@@ -445,6 +445,40 @@ async def obter_detalhe_ciclo(db: AsyncSession, *, tenant_id: UUID, inventario_i
     }
 
 
+async def cancelar_ciclo(db: AsyncSession, *, tenant_id: UUID, inventario_id: UUID) -> Inventario:
+    """Descarta um ciclo aberto sem contagem — só permitido se NENHUM item
+    ainda foi tocado (nenhuma tentativa registrada). Se já existe contagem
+    real, o caminho é o fluxo normal (enviar-analise -> aprovar-final), não
+    cancelamento — evita perder trabalho por engano."""
+    inventario = await _obter_inventario_ou_404(db, tenant_id=tenant_id, inventario_id=inventario_id)
+    if inventario.status != "aberto":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Só é possível cancelar um ciclo que ainda está em contagem.",
+        )
+
+    itens_contados = (
+        await db.execute(
+            select(func.count())
+            .select_from(InventarioItem)
+            .where(InventarioItem.inventario_id == inventario_id, InventarioItem.status_item != "pendente")
+        )
+    ).scalar_one()
+    if itens_contados > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Este ciclo já tem {itens_contados} item(ns) contado(s) — cancelar descartaria essa contagem. "
+                "Use 'Concluir Contagem' para enviar para análise em vez de cancelar."
+            ),
+        )
+
+    inventario.status = "cancelado"
+    await db.commit()
+    await db.refresh(inventario)
+    return inventario
+
+
 async def listar(
     db: AsyncSession, *, tenant_id: UUID, status_filtro: str | None = None, pagina: int = 1, tamanho: int = 25
 ) -> list[Inventario]:

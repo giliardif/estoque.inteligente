@@ -162,6 +162,17 @@ async def enviar_anexo_item_inventario(
     return {"anexo_url": url}
 
 
+@router.post("/{inventario_id}/cancelar", response_model=InventarioOut)
+async def cancelar_ciclo_inventario(
+    inventario_id: UUID,
+    user: CurrentUser = Depends(require_perfil("admin", "operador")),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Descarta um ciclo aberto sem nenhuma contagem — ex: aberto antes de
+    existir produto no tenant, ou aberto por engano."""
+    return await service.cancelar_ciclo(db, tenant_id=user.tenant_id, inventario_id=inventario_id)
+
+
 @router.post("/{inventario_id}/enviar-analise", response_model=EnviarAnaliseOut)
 async def enviar_inventario_para_analise(
     inventario_id: UUID,

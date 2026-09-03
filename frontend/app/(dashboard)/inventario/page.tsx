@@ -14,7 +14,7 @@ import { DetalheCicloModal } from "@/components/inventario/DetalheCicloModal";
 
 const TAMANHO_PAGINA = 25;
 
-const STATUS_LABEL: Record<string, string> = { aberto: "Aberto", em_analise: "Em Análise", fechado: "Fechado" };
+const STATUS_LABEL: Record<string, string> = { aberto: "Aberto", em_analise: "Em Análise", fechado: "Fechado", cancelado: "Cancelado" };
 
 // Perfis com poder de conciliar/aprovar — hoje só admin. Ver
 // PERFIS_SUPERVISOR em core/security.py no backend: quando o perfil
@@ -174,7 +174,7 @@ export default function InventarioPage() {
         inventario.status === "em_analise" && ehSupervisor ? (
           <PainelConciliacaoInventario inventarioId={inventario.id} onAprovado={aoConcluirCiclo} />
         ) : (
-          <PainelOperadorInventario inventarioId={inventario.id} onEnviadoParaAnalise={verificarAberto} />
+          <PainelOperadorInventario inventarioId={inventario.id} onEnviadoParaAnalise={verificarAberto} onCancelado={aoConcluirCiclo} />
         )
       )}
 
@@ -193,7 +193,7 @@ export default function InventarioPage() {
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:contents">
-            {["aberto", "em_analise", "fechado"].map((s) => (
+            {["aberto", "em_analise", "fechado", "cancelado"].map((s) => (
               <ChipFiltro key={s} label={STATUS_LABEL[s]} ativo={statusFiltro === s}
                 onClick={() => setStatusFiltro((atual) => (atual === s ? "" : s))} />
             ))}
@@ -346,7 +346,9 @@ function StatusBadge({ status }: { status: string }) {
     ? { color: "var(--cor-acento)", background: "rgba(16,185,129,0.14)" }
     : status === "em_analise"
       ? { color: "#F59E0B", background: "rgba(245,158,11,0.16)" }
-      : { color: "var(--cor-texto-muted)", background: "rgba(138,127,115,0.14)" };
+      : status === "cancelado"
+        ? { color: "var(--cor-alerta)", background: "rgba(162,59,59,0.1)" }
+        : { color: "var(--cor-texto-muted)", background: "rgba(138,127,115,0.14)" };
   return <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={estilo}>{STATUS_LABEL[status] ?? status}</span>;
 }
 
