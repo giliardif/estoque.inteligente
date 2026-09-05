@@ -589,3 +589,50 @@ export type JobImpressaoPendente = {
   payload_json: { html?: string };
   criado_em: string;
 };
+
+export type ReposicaoInteligencia = {
+  produto_id: string;
+  produto_nome: string;
+  estoque_atual: number;
+  demanda_media_dia: number;
+  tendencia: "alta" | "baixa" | "estavel";
+  quantidade_sugerida: number;
+  precisa_repor: boolean;
+  narrativa: string | null;
+};
+
+export type IndicadorGiroInteligencia = {
+  produto_id: string;
+  produto_nome: string;
+  giro_periodo: number;
+  cobertura_dias: number | null;
+  risco_ruptura: "alto" | "medio" | "baixo";
+};
+
+export type AnomaliaInteligencia = {
+  produto_id: string;
+  produto_nome: string;
+  classificacao: "pico" | "queda";
+  semana_atual: number;
+  media_historica: number;
+  z_score: number | null;
+  narrativa: string | null;
+};
+
+export type DeadStockInteligencia = {
+  produto_id: string;
+  produto_nome: string;
+  dias_parado: number;
+  saldo_parado: number;
+  valor_em_risco: number;
+  narrativa: string | null;
+};
+
+export type PainelInteligencia = {
+  ultima_analise_em: string | null;
+  resumo_semanal: string | null;
+  reposicoes: ReposicaoInteligencia[];
+  indicadores_giro: IndicadorGiroInteligencia[];
+  anomalias: AnomaliaInteligencia[];
+  dead_stock: DeadStockInteligencia[];
+};

@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     MAX_IMPORT_PRODUTOS_SIZE_MB: int = 5
     MAX_IMPORT_PRODUTOS_LINHAS: int = 1000
 
+    # Camada de Inteligência (Etapa 40) — narrativa da IA. Sem esta chave, a
+    # camada analista continua funcionando normalmente (calcula e persiste);
+    # só a narrativa em texto fica indisponível (NarrativaIndisponivel),
+    # tratado como não-fatal pelo service.
+    ANTHROPIC_API_KEY: str | None = None
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_not_default(cls, v: str) -> str:

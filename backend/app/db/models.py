@@ -332,3 +332,22 @@ class FilaImpressao(Base):
     job_origem_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("filas_impressao.id"))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class InsightGerado(Base):
+    """Único ponto de contato entre a camada analista (Python, calcula
+    e grava dados_calculados) e a camada narrativa (LLM, só lê
+    dados_calculados e preenche narrativa). Nunca é a LLM que
+    escreve em dados_calculados."""
+
+    __tablename__ = "insights_gerados"
+    id: Mapped[uuid.UUID] = _uuid_col()
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"))
+    produto_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("produtos.id", ondelete="CASCADE"))
+    tipo: Mapped[str] = mapped_column(String(30))  # reposicao | indicador_giro | anomalia | dead_stock | resumo_semanal
+    dados_calculados: Mapped[dict] = mapped_column(JSONB)
+    hash_calculo: Mapped[str] = mapped_column(String(64))
+    narrativa: Mapped[str | None] = mapped_column(Text)
+    narrativa_gerada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

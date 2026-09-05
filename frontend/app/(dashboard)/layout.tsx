@@ -10,7 +10,7 @@ import { useNotificacoesInventario } from "@/lib/useNotificacoesInventario";
 import ToggleTema from "@/components/ui/ToggleTema";
 import {
   LayoutGrid, Package, Boxes, ArrowLeftRight, ClipboardList, FileText,
-  BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X, Tag, Settings,
+  BarChart3, ShoppingCart, ShoppingBag, Bell, LogOut, Menu, X, Tag, Settings, Sparkles,
 } from "lucide-react";
 
 const nav = [
@@ -24,6 +24,7 @@ const nav = [
   { href: "/notas", label: "Notas Fiscais", icon: FileText },
   { href: "/compras", label: "Compras", icon: ShoppingBag },
   { href: "/alertas", label: "Alertas", icon: Bell },
+  { href: "/inteligencia", label: "Inteligência", icon: Sparkles },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];

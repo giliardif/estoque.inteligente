@@ -3175,3 +3175,57 @@ Esta entrada cobre só o **backend** das 3 pendências identificadas (Empresa, n
 **Verificação:** como não tenho acesso de rede a `eligente-staging.vercel.app`/Railway a partir do sandbox (domínios não liberados), a validação foi feita por dois caminhos equivalentes: (1) suíte completa contra Postgres real — **273/273**, incluindo 2 testes novos que reproduzem o cenário exato do bug (`test_item_nunca_contado_pode_ser_mandado_para_recontagem`, `test_item_pendente_nao_pode_ser_aprovado_direto`); (2) os 2 itens travados do ciclo real em staging foram inspecionados e corrigidos diretamente via SQL (mesmo efeito que o botão "Solicitar Contagem" produziria), confirmando a correção nos dados reais que geraram o report. `tsc`/`next build` limpos. Bandit 0 issues.
 
 **Entregável:** `backend/app/modules/inventario/{service,router}.py`, `backend/tests/test_inventario_conciliacao.py`, `frontend/components/inventario/PainelConciliacaoInventario.tsx`, `frontend/app/(dashboard)/inventario/page.tsx` + zip completo do projeto.
+
+---
+
+## Etapa 40 — Camada de Inteligência (previsão, giro, anomalias, dead stock + narrativa IA)
+
+**Motivação:** o painel principal e o motor de alertas já existentes são regra fixa/threshold determinístico (`saldo < mínimo`, `parado > N dias`) — úteis, mas reativos ao presente, não preditivos. Esta etapa introduz a primeira camada de fato estatística/preditiva do produto, com uma separação arquitetural não-negociável: uma camada **analista** (Python puro, calcula e persiste) e uma camada **narrativa** (LLM, só lê o já calculado e escreve texto) — a LLM nunca calcula, nunca acessa o banco. Motivo explícito combinado com o usuário: manter consumo de tokens baixo e previsível.
+
+**Estrutura de pastas** (separação física, não só por convenção):
+```
+app/modules/inteligencia/
+├── router.py, schemas.py, service.py   (orquestrador — único lugar que fala com as duas camadas)
+├── analista/    → previsao.py, indicadores.py, anomalias.py (zero I/O, zero import de banco)
+└── narrativa/   → cliente_llm.py, prompts.py (zero import de banco/sessão)
+```
+
+**Camada analista:**
+- **Previsão de demanda** — série diária densificada (dias sem venda = 0), média móvel ponderada (peso linear, recente pesa mais), tendência via regressão linear simples (mínimos quadrados, sem numpy), classificada em relação à própria demanda média do produto (percentual, não absoluto)
+- **Ponto de reposição / quantidade sugerida** — fórmula padrão (demanda × (lead time + margem de segurança)); lead time hoje é constante fixa (`LEAD_TIME_PADRAO_DIAS=3`) — **não há lead time por fornecedor cadastrado no sistema ainda**, fica registrado como limitação conhecida
+- **Giro/cobertura/risco de ruptura** — adicionados ao escopo durante a sessão (decisão do usuário: "são baratos, derivam do mesmo cálculo de demanda"); risco de ruptura considera cobertura em dias vs. lead time, não é threshold fixo isolado
+- **Anomalia** — z-score da demanda semanal atual vs. histórico (mín. 4 semanas), classificado em pico/queda/normal; diferente do alerta `estoque_baixo` existente porque dispara por comportamento fora do padrão, não por quantidade absoluta
+- **Dead stock** — dias sem movimentação (reaproveita threshold igual ao alerta `produto_parado`) **+ valor financeiro em risco** (saldo × custo médio), que é o que faltava no alerta existente pra priorizar por impacto real
+
+**Camada narrativa:**
+- SDK oficial `anthropic` (adicionado ao requirements.txt), modelo `claude-haiku-4-5-20251001` — escolha deliberada (mais barato/rápido, suficiente pra reescrever um dict pequeno em texto fluente, sem exigir raciocínio profundo)
+- Prompt por tipo de insight, tamanho fixo e pequeno — não cresce com volume de dados do tenant, só com os campos do dict recebido
+- Falha na LLM (`NarrativaIndisponivel`) é tratada como não-fatal — o cálculo já foi persistido; a narrativa fica pendente até a próxima análise, sem quebrar o resto do fluxo (testado explicitamente)
+
+**Persistência:** tabela nova `insights_gerados` (migration 019) — uma linha "vigente" por `(tenant_id, tipo, produto_id)` via índice único (não é log de auditoria, é retrato mais recente calculado); guarda `hash_calculo` pra decidir se vale chamar a LLM de novo (não narra de novo se nada mudou desde a última análise — economia de tokens). Anomalias e dead stock que deixam de qualificar são removidos da tabela (não ficam eternamente na tela depois que o comportamento normaliza).
+
+**Execução:** sob demanda via `POST /inteligencia/analisar` (botão "Atualizar análise" no frontend) — Railway Cron fica mapeado como pendência técnica pra configurar depois, decisão explícita do usuário. `GET /inteligencia/painel` lê o que já está persistido sem recalcular.
+
+**Ação real integrada com Compras:** `POST /inteligencia/reposicao/criar-pedido` cria um pedido de compra de verdade via `compras.service.criar_pedido` (mesmo endpoint que já existia), usando a quantidade sugerida já persistida — não recalcula na hora, usa exatamente o que o usuário viu na tela. Testado que o pedido criado aparece de fato em `GET /compras/pedidos` (não é efeito isolado do módulo novo).
+
+**Achado durante a auditoria:** já existia `GET /compras/sugestao-reposicao` — versão simples por threshold (`saldo < mínimo`), sem forecasting nem tendência. Mantida como está (não é a mesma coisa, não foi removida); a sugestão nova e mais robusta vive só na tela de Inteligência.
+
+**Escopo explicitamente fora desta etapa (decisão do usuário):** botão "Criar promoção" removido do card de dead stock — não existe módulo de promoção/desconto no sistema hoje; vira item de backlog próprio (regras de desconto, vigência, aplicação), fora da Etapa 40. O card de dead stock, por ora, só narra a sugestão em texto, sem CTA.
+
+**Tela nova:** `/inteligencia`, item de menu com badge "NOVO", HTML mockup aprovado visualmente antes da implementação (padrão do projeto) — resumo semanal narrado em destaque, sugestões de reposição (cards de ação), giro/cobertura (tabela), anomalias e dead stock (cards).
+
+**Verificação:**
+- Camada analista: 23/23 testes (Python puro, sem banco — `test_inteligencia_analista.py`)
+- Integração: 9/9 testes (`test_inteligencia_api.py`) — narrativa mockada (não faz sentido bater na API real da Anthropic em CI: lento, caro, dependente de rede); cobre isolamento entre tenants, permissão por perfil (leitura não dispara análise, só visualiza), falha da LLM não afeta persistência do cálculo, e o pedido de compra real criado em Compras
+- Suíte completa do projeto: **305/305** (rodada em lotes menores nesta sessão — um `pytest` de ~200s derrubou o Postgres local do sandbox no meio da execução; dividir em lotes de ~100 testes contornou o problema, sem indicar regressão real)
+- `test_auth.py` isolado ficou lento demais pra concluir mesmo isolado nesta sessão — bate com o comportamento intermitente já documentado (banco de teste acumula `refresh_tokens`, degrada `argon2.verify`); não é regressão desta etapa, não mexe em auth
+- `tsc --noEmit` limpo, `next build` limpo (`/inteligencia` gerada, 4.7 kB)
+- Bandit: 0 issues
+- Migration 019 aplicada e verificada estruturalmente no Supabase de staging real (schema `estoque_inteligente` qualificado explicitamente em toda referência — há uma tabela `tenants` duplicada em `public` no mesmo projeto, reforça a necessidade de nunca depender de `search_path` via MCP); RLS+FORCE confirmados via `pg_class`, GRANT concedido só a `app_estoque` (sem BYPASSRLS)
+
+**Pendências registradas, não tratadas agora:**
+- Railway Cron para rodar a análise automaticamente (hoje é só sob demanda)
+- Lead time por fornecedor não é cadastrado no sistema — usado valor fixo (3 dias) como placeholder
+- Módulo de promoção/desconto de verdade (novo item de backlog)
+
+**Entregável:** `backend/migrations/019_inteligencia_insights.sql`, `backend/app/db/models.py`, `backend/app/modules/inteligencia/` (novo módulo completo), `backend/app/core/config.py`, `backend/requirements.txt`, `backend/.env.example`, `backend/app/main.py`, `backend/tests/test_inteligencia_analista.py`, `backend/tests/test_inteligencia_api.py`, `frontend/lib/types.ts`, `frontend/app/(dashboard)/layout.tsx`, `frontend/app/(dashboard)/inteligencia/page.tsx` (novo) + zip completo do projeto.
